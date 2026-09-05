@@ -43,6 +43,21 @@ pub struct Settings {
     pub global_shortcut: String,
 }
 
+/// 单个文件的改动（状态详情用）
+#[derive(Serialize, Clone, Debug, Default)]
+pub struct ChangedFile {
+    /// 仓库内相对路径
+    pub path: String,
+    /// 改名/拷贝前的原始路径（R/C 状态时有值）
+    pub original_path: Option<String>,
+    /// 暂存区状态（X 列）
+    pub index_status: String,
+    /// 工作区状态（Y 列）
+    pub worktree_status: String,
+    /// 是否已暂存（X 列非空且无改动标记）
+    pub staged: bool,
+}
+
 /// 项目 Git 状态
 #[derive(Serialize, Clone, Debug, Default)]
 pub struct ProjectStatus {
@@ -54,6 +69,10 @@ pub struct ProjectStatus {
     pub staged: u32,
     pub untracked: u32,
     pub is_clean: bool,
+    /// 是否处于分离 HEAD（detached）状态
+    pub is_detached: bool,
+    /// 逐文件改动列表（staging 面板用）
+    pub changed_files: Vec<ChangedFile>,
     pub last_fetched: Option<i64>,
     pub is_fetching: bool,
     pub error: Option<String>,
@@ -85,6 +104,10 @@ pub struct Branch {
     pub is_remote: bool,
     pub is_current: bool,
     pub upstream: Option<String>,
+    /// 是否处于分离 HEAD
+    pub is_detached: bool,
+    /// 若来自 worktree，则记录其工作树路径
+    pub worktree_path: Option<String>,
 }
 
 /// Git 提交记录
@@ -99,11 +122,44 @@ pub struct Commit {
     pub parents: Vec<String>,
 }
 
-/// 提交中的文件改动
+/// 提交中的文件改动（含增删行数、改名信息）
 #[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct CommitFile {
     pub status: String,
     pub path: String,
+    /// 改名/拷贝前的原路径
+    pub original_path: Option<String>,
+    /// 新增行数
+    pub added: u32,
+    /// 删除行数
+    pub removed: u32,
+    /// 是否为二进制文件
+    pub is_binary: bool,
+}
+
+/// 提交结果（commit 命令返回）
+#[derive(Serialize, Clone, Debug)]
+pub struct GitCommitResult {
+    pub commit_sha: String,
+    pub summary: String,
+}
+
+/// 文件内容 diff 结果（左右对比用）
+#[derive(Serialize, Clone, Debug)]
+pub struct GitDiffContentResult {
+    pub original_content: String,
+    pub modified_content: String,
+    pub is_binary: bool,
+    /// 当无法做内容对比时的原始 patch 回退
+    pub fallback_patch: String,
+}
+
+/// 丢弃改动条目（discard 命令入参）
+#[derive(Deserialize, Clone, Debug)]
+pub struct DiscardEntry {
+    pub path: String,
+    /// true=未跟踪文件（用 clean 删除），false=已跟踪文件（用 restore 还原）
+    pub untracked: bool,
 }
 
 /// 提交详情（含完整 message 和改动文件列表）

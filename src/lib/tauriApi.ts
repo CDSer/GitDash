@@ -11,8 +11,12 @@ import type {
   Branch,
   Commit,
   CommitDetail,
+  CommitFile,
   FileNode,
   Settings,
+  GitCommitResult,
+  GitDiffContentResult,
+  DiscardEntry,
 } from '../types';
 
 /**
@@ -157,6 +161,122 @@ export async function getCommitDetail(
  */
 export async function openRepoFolder(projectId: string): Promise<void> {
   return invoke('open_repo_folder', { projectId });
+}
+
+/**
+ * 暂存指定文件
+ * @param projectId 项目 ID
+ * @param paths 相对仓库根目录的文件路径列表
+ */
+export async function gitStage(projectId: string, paths: string[]): Promise<void> {
+  return invoke('git_stage', { projectId, paths });
+}
+
+/**
+ * 取消暂存指定文件
+ */
+export async function gitUnstage(projectId: string, paths: string[]): Promise<void> {
+  return invoke('git_unstage', { projectId, paths });
+}
+
+/**
+ * 丢弃改动（已跟踪 restore，未跟踪 clean）
+ * @param entries 丢弃条目列表
+ */
+export async function gitDiscard(projectId: string, entries: DiscardEntry[]): Promise<void> {
+  return invoke('git_discard', { projectId, entries });
+}
+
+/**
+ * 提交（返回新提交 sha + 摘要）
+ * @param message 提交信息
+ */
+export async function gitCommit(projectId: string, message: string): Promise<GitCommitResult> {
+  return invoke<GitCommitResult>('git_commit', { projectId, message });
+}
+
+/**
+ * 获取 diff（原始 patch 文本）
+ * @param path 可选，指定文件则只返回该文件 diff
+ * @param staged 是否查看已暂存区 diff
+ */
+export async function gitDiff(
+  projectId: string,
+  path?: string,
+  staged: boolean = false
+): Promise<string> {
+  return invoke<string>('git_diff', { projectId, path, staged });
+}
+
+/**
+ * 获取单文件左右对比内容 diff
+ */
+export async function gitDiffContent(
+  projectId: string,
+  path: string,
+  staged: boolean = false,
+  originalPath?: string
+): Promise<GitDiffContentResult> {
+  return invoke<GitDiffContentResult>('git_diff_content', {
+    projectId,
+    path,
+    staged,
+    originalPath,
+  });
+}
+
+/**
+ * 获取单次提交的完整 patch（含 stat）
+ */
+export async function gitShowCommit(projectId: string, sha: string): Promise<string> {
+  return invoke<string>('git_show_commit', { projectId, sha });
+}
+
+/**
+ * 获取单次提交改动的文件列表（含增删行数与改名）
+ */
+export async function gitCommitFiles(projectId: string, sha: string): Promise<CommitFile[]> {
+  return invoke<CommitFile[]>('git_commit_files', { projectId, sha });
+}
+
+/**
+ * 获取单次提交中单个文件的左右对比内容 diff
+ */
+export async function gitCommitFileDiff(
+  projectId: string,
+  sha: string,
+  path: string,
+  originalPath?: string
+): Promise<GitDiffContentResult> {
+  return invoke<GitDiffContentResult>('git_commit_file_diff', {
+    projectId,
+    sha,
+    path,
+    originalPath,
+  });
+}
+
+/**
+ * 切换分支
+ */
+export async function gitCheckoutBranch(projectId: string, branch: string): Promise<void> {
+  return invoke('git_checkout_branch', { projectId, branch });
+}
+
+/**
+ * 获取远端地址（默认 origin）
+ */
+export async function gitRemoteUrl(projectId: string, name?: string): Promise<string | null> {
+  return invoke<string | null>('git_remote_url', { projectId, name });
+}
+
+/**
+ * 强制刷新项目状态（忽略缓存）
+ */
+export async function getProjectStatusForce(
+  projectId: string
+): Promise<ProjectStatus> {
+  return invoke<ProjectStatus>('get_project_status', { projectId, force: true });
 }
 
 /**

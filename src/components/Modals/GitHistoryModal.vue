@@ -94,6 +94,9 @@
           <div class="detail-section">
             <div class="detail-label">Commit</div>
             <div class="detail-hash" :title="detail.id">{{ detail.id }}</div>
+            <Button v-if="remoteUrl" size="sm" variant="ghost" class="detail-remote" @click="openRemoteCommit">
+              <ExternalLink :size="12" /> 在远程查看
+            </Button>
           </div>
           <div v-if="detail.parents.length" class="detail-section">
             <div class="detail-label">父提交</div>
@@ -104,26 +107,51 @@
           <div class="detail-section">
             <div class="detail-label">改动文件</div>
             <div v-if="!detail.files.length" class="detail-empty">无文件改动</div>
-            <div v-for="f in detail.files" :key="f.path" class="detail-file">
+            <div
+              v-for="f in detail.files"
+              :key="f.path"
+              class="detail-file detail-file--click"
+              :title="f.original_path && f.original_path !== f.path ? f.original_path + ' → ' + f.path : f.path"
+              @click="openFileDiff(f)"
+            >
               <Tag :variant="statusVariant(f.status)" class="file-status">{{ f.status }}</Tag>
-              <span class="file-path" :title="f.path">{{ f.path }}</span>
+              <span class="file-path" :title="f.path">{{
+                f.original_path && f.original_path !== f.path ? f.original_path + ' → ' + f.path : f.path
+              }}</span>
+              <span v-if="f.added || f.removed" class="file-count">+{{ f.added }} -{{ f.removed }}</span>
             </div>
           </div>
         </div>
         <Empty v-else description="选择一条提交查看详情" />
       </aside>
     </div>
+
+    <Dialog v-model="fileDiffVisible" :title="`文件改动 · ${fileDiffTitle}`" width="720px">
+      <div class="file-diff-box">
+        <DiffViewer :patch="fileDiffPatch" :is-binary="fileDiffBinary" empty-text="该文件无文本差异" />
+      </div>
+    </Dialog>
   </Dialog>
 </template>
 
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue';
-import type { Branch, Commit, CommitDetail, Project } from '../../types';
-import { getBranches, getCommits, getCommitDetail } from '../../lib/tauriApi';
+import { open } from '@tauri-apps/plugin-shell';
+import type { Branch, Commit, CommitDetail, CommitFile, Project } from '../../types';
+import {
+  getBranches,
+  getCommits,
+  getCommitDetail,
+  gitRemoteUrl,
+  gitCommitFileDiff,
+} from '../../lib/tauriApi';
 import Dialog from '../ui/Dialog.vue';
 import Tag from '../ui/Tag.vue';
+import Button from '../ui/Button.vue';
 import Spinner from '../ui/Spinner.vue';
 import Empty from '../ui/Empty.vue';
+import DiffViewer from '../Git/DiffViewer.vue';
+import { ExternalLink } from 'lucide-vue-next';
 import { toast } from '../../lib/toast';
 
 const visible = defineModel<boolean>({ required: true });
@@ -135,6 +163,11 @@ const commits = ref<Commit[]>([]);
 const selectedCommit = ref<Commit | null>(null);
 const detail = ref<CommitDetail | null>(null);
 const loadingCommits = ref(false);
+const remoteUrl = ref<string | null>(null);
+const fileDiffVisible = ref(false);
+const fileDiffPatch = ref('');
+const fileDiffBinary = ref(false);
+const fileDiffTitle = ref('');
 
 const localBranches = computed(() => branches.value.filter((b) => b.is_local));
 const remoteBranches = computed(() => branches.value.filter((b) => b.is_remote));
@@ -145,9 +178,46 @@ watch(visible, async (open) => {
     commits.value = [];
     selectedCommit.value = null;
     detail.value = null;
-    await loadBranches();
+    remoteUrl.value = null;
+    await Promise.all([loadBranches(), loadRemoteUrl()]);
   }
 });
+
+async function loadRemoteUrl() {
+  if (!props.project) return;
+  try {
+    remoteUrl.value = await gitRemoteUrl(props.project.id);
+  } catch {
+    remoteUrl.value = null;
+  }
+}
+
+function openRemoteCommit() {
+  if (remoteUrl.value && detail.value) {
+    open(`${remoteUrl.value.replace(/\.git$/, '')}/commit/${detail.value.id}`);
+  }
+}
+
+async function openFileDiff(f: CommitFile) {
+  if (!props.project || !detail.value) return;
+  fileDiffTitle.value = f.original_path && f.original_path !== f.path
+    ? `${f.original_path} → ${f.path}`
+    : f.path;
+  try {
+    const res = await gitCommitFileDiff(
+      props.project.id,
+      detail.value.id,
+      f.path,
+      f.original_path ?? undefined,
+    );
+    fileDiffBinary.value = res.is_binary;
+    fileDiffPatch.value = res.fallback_patch || res.modified_content || '';
+    fileDiffVisible.value = true;
+  } catch (e) {
+    console.error('加载文件 diff 失败：', e);
+    toast.error('加载文件 diff 失败');
+  }
+}
 
 watch(selectedBranch, async (branch) => {
   if (!branch) return;
@@ -406,5 +476,25 @@ function statusVariant(status: string): 'success' | 'danger' | 'warning' | 'info
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+.detail-file--click {
+  cursor: pointer;
+  border-radius: 4px;
+  padding: 4px 4px;
+}
+.detail-file--click:hover {
+  background-color: var(--accent);
+}
+.file-count {
+  flex-shrink: 0;
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+  color: var(--muted-foreground);
+}
+.detail-remote {
+  margin-top: 6px;
+}
+.file-diff-box {
+  height: 520px;
 }
 </style>

@@ -42,9 +42,20 @@ export interface ProjectStatus {
   staged: number;
   untracked: number;
   is_clean: boolean;
+  is_detached: boolean;
+  changed_files: ChangedFile[];
   last_fetched: number | null;
   is_fetching: boolean;
   error: string | null;
+}
+
+/** 单文件改动（staging 面板用） */
+export interface ChangedFile {
+  path: string;
+  original_path?: string | null;
+  index_status: string;
+  worktree_status: string;
+  staged: boolean;
 }
 
 export interface GitResult {
@@ -77,7 +88,9 @@ export interface Branch {
   is_local: boolean;
   is_remote: boolean;
   is_current: boolean;
-  upstream?: string;
+  upstream?: string | null;
+  is_detached: boolean;
+  worktree_path?: string | null;
 }
 
 /** Git 提交记录 */
@@ -91,10 +104,34 @@ export interface Commit {
   parents: string[];
 }
 
-/** 提交中的文件改动 */
+/** 提交中的文件改动（含增删行数与改名） */
 export interface CommitFile {
   status: string;
   path: string;
+  original_path?: string | null;
+  added: number;
+  removed: number;
+  is_binary: boolean;
+}
+
+/** 提交结果（commit 命令返回） */
+export interface GitCommitResult {
+  commit_sha: string;
+  summary: string;
+}
+
+/** 文件内容 diff 结果（左右对比） */
+export interface GitDiffContentResult {
+  original_content: string;
+  modified_content: string;
+  is_binary: boolean;
+  fallback_patch: string;
+}
+
+/** 丢弃改动条目（discard 命令入参） */
+export interface DiscardEntry {
+  path: string;
+  untracked: boolean;
 }
 
 /** 提交详情 */

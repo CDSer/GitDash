@@ -34,7 +34,18 @@ macro_rules! invoke_handler {
             $crate::commands::batch_pull,
             $crate::commands::batch_fetch,
             $crate::commands::batch_push,
-            $crate::commands::open_repo_folder
+            $crate::commands::open_repo_folder,
+            $crate::commands::git_stage,
+            $crate::commands::git_unstage,
+            $crate::commands::git_discard,
+            $crate::commands::git_commit,
+            $crate::commands::git_diff,
+            $crate::commands::git_diff_content,
+            $crate::commands::git_show_commit,
+            $crate::commands::git_commit_files,
+            $crate::commands::git_commit_file_diff,
+            $crate::commands::git_checkout_branch,
+            $crate::commands::git_remote_url
         ]
     };
 }

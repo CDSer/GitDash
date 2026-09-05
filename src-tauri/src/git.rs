@@ -1,7 +1,7 @@
 // Git 执行器模块
 // 负责执行 Git 命令、解析状态、并发控制
 
-use crate::models::{GitResult, ProjectStatus};
+use crate::models::{ChangedFile, GitResult, ProjectStatus};
 use parking_lot::Mutex;
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -109,6 +109,8 @@ impl GitExecutor {
                 staged: 0,
                 untracked: 0,
                 is_clean: false,
+                is_detached: false,
+                changed_files: Vec::new(),
                 last_fetched: None,
                 is_fetching: false,
                 error: Some(result.stderr),
@@ -118,53 +120,79 @@ impl GitExecutor {
         self.parse_status_output(&result.stdout)
     }
 
-    /// 解析 git status 输出
+    /// 解析 git status 输出（porcelain v1，含逐文件改动与 detached 状态）
     fn parse_status_output(&self, output: &str) -> ProjectStatus {
         let mut branch = String::new();
         let mut ahead = 0u32;
         let mut behind = 0u32;
+        let mut is_detached = false;
         let mut modified = 0u32;
         let mut staged = 0u32;
         let mut untracked = 0u32;
-        
+        let mut changed_files: Vec<ChangedFile> = Vec::new();
+
         let lines: Vec<&str> = output.lines().collect();
-        
+
         if let Some(first_line) = lines.first() {
-            // 解析分支行：## main...origin/main [ahead 2, behind 1]
             if first_line.starts_with("## ") {
+                // 分离 HEAD：## HEAD (no branch) 或 ## HEAD (no branch, ...)
+                let rest = &first_line[3..];
+                is_detached = rest.contains("no branch") || rest.trim_start().starts_with("HEAD (");
                 branch = self.parse_branch_line(first_line);
                 let (a, b) = self.parse_ahead_behind(first_line);
                 ahead = a;
                 behind = b;
             }
         }
-        
-        // 解析状态行（跳过第一行的分支信息）
+
+        // 跳过第一行的分支信息
         for line in lines.iter().skip(1) {
-            if line.is_empty() {
+            if line.is_empty() || line.len() < 3 {
                 continue;
             }
-            
-            if line.len() >= 2 {
-                let index_status = &line[0..1];
-                let working_status = &line[1..2];
-                
-                if index_status != " " && index_status != "?" {
-                    staged += 1;
+
+            let index_status = &line[0..1];
+            let worktree_status = &line[1..2];
+            let rest = &line[3..]; // 跳过 "XY "
+
+            // 改名 / 拷贝：rest 形如 "old\tnew"
+            let (path, original_path) = if index_status.starts_with('R')
+                || index_status.starts_with('C')
+                || worktree_status.starts_with('R')
+                || worktree_status.starts_with('C')
+            {
+                let parts: Vec<&str> = rest.split('\t').collect();
+                if parts.len() >= 2 {
+                    (parts[1].to_string(), Some(parts[0].to_string()))
+                } else {
+                    (rest.to_string(), None)
                 }
-                
-                if working_status != " " && working_status != "?" && working_status != "." {
-                    modified += 1;
-                }
-                
-                if working_status == "?" || (index_status == "?" && line.len() == 1) {
-                    untracked += 1;
-                }
+            } else {
+                (rest.to_string(), None)
+            };
+
+            let is_staged = index_status != " " && index_status != "?";
+            if is_staged {
+                staged += 1;
             }
+            if worktree_status != " " && worktree_status != "?" && worktree_status != "." {
+                modified += 1;
+            }
+            if worktree_status == "?" || index_status == "?" {
+                untracked += 1;
+            }
+
+            changed_files.push(ChangedFile {
+                path,
+                original_path,
+                index_status: index_status.to_string(),
+                worktree_status: worktree_status.to_string(),
+                staged: is_staged,
+            });
         }
-        
+
         let is_clean = modified == 0 && staged == 0 && untracked == 0;
-        
+
         ProjectStatus {
             project_id: String::new(),
             branch,
@@ -174,6 +202,8 @@ impl GitExecutor {
             staged,
             untracked,
             is_clean,
+            is_detached,
+            changed_files,
             last_fetched: None,
             is_fetching: false,
             error: None,

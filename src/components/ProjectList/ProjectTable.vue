@@ -85,6 +85,7 @@
                 {{ row.is_favorite ? '取消收藏' : '设为收藏' }}
               </DropdownItem>
               <DropdownItem :icon="GitCommitHorizontal" @click="openHistory(row)">Git 记录</DropdownItem>
+              <DropdownItem :icon="GitBranch" @click="openSourceControl(row)">源码控制</DropdownItem>
               <div class="my-1 h-px bg-border" />
               <div class="px-2 py-1 text-xs text-muted-foreground">移动到分组</div>
               <DropdownItem
@@ -103,6 +104,10 @@
               </DropdownItem>
               <DropdownItem v-if="row.group_id" danger @click="moveTo(row, null)">
                 移出分组
+              </DropdownItem>
+              <div class="my-1 h-px bg-border" />
+              <DropdownItem danger :icon="Trash2" @click="openRemove(row)">
+                取消管理项目
               </DropdownItem>
             </Dropdown>
           </div>
@@ -141,11 +146,23 @@
         <Button size="sm" :disabled="operationStore.isQueueRunning" @click="batchPush">
           <Upload :size="14" /> 推送
         </Button>
+        <Button size="sm" variant="ghost" danger @click="openBatchRemove">
+          <Trash2 :size="14" /> 取消管理
+        </Button>
         <Button size="sm" variant="ghost" @click="clearSelection">取消选择</Button>
       </div>
     </div>
 
     <GitHistoryModal v-model="showHistory" :project="historyProject" />
+    <SourceControlModal v-model="showSourceControl" :project="sourceControlProject" />
+    <ConfirmDialog
+      v-model="confirmOpen"
+      title="取消管理项目"
+      :message="confirmMessage"
+      confirm-text="取消管理"
+      danger
+      @confirm="doRemove"
+    />
   </div>
 </template>
 
@@ -162,6 +179,8 @@ import {
   Upload,
   GitCommitHorizontal,
   Monitor,
+  GitBranch,
+  Trash2,
 } from 'lucide-vue-next';
 import type { Project, ProjectStatus } from '../../types';
 import { useAppStore } from '../../stores/appStore';
@@ -171,6 +190,12 @@ import StatusBadge from './StatusBadge.vue';
 import StatusChanges from './StatusChanges.vue';
 const GitHistoryModal = defineAsyncComponent(
   () => import('../Modals/GitHistoryModal.vue'),
+);
+const SourceControlModal = defineAsyncComponent(
+  () => import('../Modals/SourceControlModal.vue'),
+);
+const ConfirmDialog = defineAsyncComponent(
+  () => import('../ui/ConfirmDialog.vue'),
 );
 import { useProjectStatus } from '../../composables/useProjectStatus';
 import { toast } from '../../lib/toast';
@@ -186,6 +211,12 @@ const { getStatus } = useProjectStatus();
 
 const showHistory = ref(false);
 const historyProject = ref<Project | null>(null);
+const showSourceControl = ref(false);
+const sourceControlProject = ref<Project | null>(null);
+
+const confirmOpen = ref(false);
+const pendingRemoveId = ref<string | null>(null);
+const batchRemoveMode = ref(false);
 
 const statusFor = (projectId: string): ProjectStatus | null =>
   appStore.statuses.get(projectId) ?? null;
@@ -235,6 +266,63 @@ function enterWorkspace(project: Project) {
 function openHistory(project: Project) {
   historyProject.value = project;
   showHistory.value = true;
+}
+
+function openSourceControl(project: Project) {
+  sourceControlProject.value = project;
+  showSourceControl.value = true;
+}
+
+const confirmMessage = computed(() => {
+  if (batchRemoveMode.value) {
+    const n = selectedProjectIds.value.size;
+    return `确定要取消管理选中的 ${n} 个项目吗？该操作不会删除本地文件，仅从 GitDash 中移除。`;
+  }
+  const name =
+    pendingRemoveId.value
+      ? appStore.projects.find((p) => p.id === pendingRemoveId.value)?.name ?? ''
+      : '';
+  return `确定要取消管理项目「${name}」吗？该操作不会删除本地文件，仅从 GitDash 中移除。`;
+});
+
+function openRemove(row: Project) {
+  pendingRemoveId.value = row.id;
+  batchRemoveMode.value = false;
+  confirmOpen.value = true;
+}
+
+function openBatchRemove() {
+  if (selectedProjectIds.value.size === 0) return;
+  batchRemoveMode.value = false;
+  pendingRemoveId.value = null;
+  confirmOpen.value = true;
+}
+
+async function doRemove() {
+  if (batchRemoveMode.value) {
+    const ids = [...selectedProjectIds.value];
+    for (const id of ids) {
+      try {
+        await appStore.removeProject(id);
+      } catch {
+        /* 单个失败不阻断其余 */
+      }
+    }
+    clearSelection();
+    toast.success(`已取消管理 ${ids.length} 个项目`);
+  } else if (pendingRemoveId.value) {
+    const name =
+      appStore.projects.find((p) => p.id === pendingRemoveId.value)?.name ?? '';
+    try {
+      await appStore.removeProject(pendingRemoveId.value);
+      toast.success(`已取消管理「${name}」`);
+    } catch {
+      toast.error('取消管理失败');
+    }
+  }
+  confirmOpen.value = false;
+  pendingRemoveId.value = null;
+  batchRemoveMode.value = false;
 }
 
 function moveTo(project: Project, groupId: string | null) {
