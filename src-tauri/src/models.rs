@@ -75,3 +75,51 @@ pub struct OperationEvent {
     pub status: String,
     pub message: Option<String>,
 }
+
+/// Git 分支信息
+#[derive(Serialize, Deserialize, Clone, Debug)]
+pub struct Branch {
+    pub name: String,
+    pub display_name: String,
+    pub is_local: bool,
+    pub is_remote: bool,
+    pub is_current: bool,
+    pub upstream: Option<String>,
+}
+
+/// Git 提交记录
+#[derive(Serialize, Deserialize, Clone, Debug)]
+pub struct Commit {
+    pub id: String,
+    pub short_id: String,
+    pub message: String,
+    pub author: String,
+    pub email: String,
+    pub date: i64,
+    pub parents: Vec<String>,
+}
+
+/// 提交中的文件改动
+#[derive(Serialize, Deserialize, Clone, Debug)]
+pub struct CommitFile {
+    pub status: String,
+    pub path: String,
+}
+
+/// 提交详情（含完整 message 和改动文件列表）
+#[derive(Serialize, Deserialize, Clone, Debug)]
+pub struct CommitDetail {
+    #[serde(flatten)]
+    pub commit: Commit,
+    pub body: String,
+    pub files: Vec<CommitFile>,
+}
+
+/// 文件树节点（单层，供前端懒加载文件树使用）
+#[derive(Serialize, Deserialize, Clone, Debug)]
+pub struct FileNode {
+    pub name: String,
+    pub path: String,
+    pub is_dir: bool,
+    pub has_children: bool,
+}

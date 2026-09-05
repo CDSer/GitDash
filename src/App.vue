@@ -4,11 +4,16 @@
 -->
 <template>
   <el-config-provider :locale="zhCn">
-    <MainView />
+    <MainView v-if="!appStore.workspaceProjectId" />
+    <WorkspaceView v-else />
   </el-config-provider>
 </template>
 
 <script setup lang="ts">
 import zhCn from 'element-plus/es/locale/lang/zh-cn';
 import MainView from './views/MainView.vue';
+import WorkspaceView from './views/WorkspaceView.vue';
+import { useAppStore } from './stores/appStore';
+
+const appStore = useAppStore();
 </script>

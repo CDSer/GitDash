@@ -8,6 +8,10 @@ import type {
   Group,
   GitResult,
   ProjectStatus,
+  Branch,
+  Commit,
+  CommitDetail,
+  FileNode,
 } from '../types';
 
 /**
@@ -103,9 +107,70 @@ export async function batchPush(projectIds: string[]): Promise<GitResult[]> {
 }
 
 /**
+ * 获取仓库分支列表
+ * @param projectId 项目 ID
+ */
+export async function getBranches(projectId: string): Promise<Branch[]> {
+  return invoke<Branch[]>('get_branches', { projectId });
+}
+
+/**
+ * 获取提交记录列表
+ * @param projectId 项目 ID
+ * @param branch 分支名
+ * @param limit 单页最大条数
+ * @param beforeSha 分页游标：上一页最后一条提交的 SHA，用于续拉更早的提交
+ */
+export async function getCommits(
+  projectId: string,
+  branch: string,
+  limit: number = 100,
+  beforeSha?: string
+): Promise<Commit[]> {
+  return invoke<Commit[]>('get_commits', { projectId, branch, limit, beforeSha });
+}
+
+/**
+ * 获取单次提交详情（含改动文件列表）
+ * @param projectId 项目 ID
+ * @param commitId 提交 ID
+ */
+export async function getCommitDetail(
+  projectId: string,
+  commitId: string
+): Promise<CommitDetail> {
+  return invoke<CommitDetail>('get_commit_detail', { projectId, commitId });
+}
+
+/**
  * 用系统文件管理器打开仓库文件夹
  * @param projectId 项目 ID
  */
 export async function openRepoFolder(projectId: string): Promise<void> {
   return invoke('open_repo_folder', { projectId });
+}
+
+/**
+ * 列出目录内容（单层，用于懒加载文件树）
+ * @param path 目录绝对路径
+ */
+export async function listDirectory(path: string): Promise<FileNode[]> {
+  return invoke<FileNode[]>('list_directory', { path });
+}
+
+/**
+ * 读取文本文件内容
+ * @param path 文件绝对路径
+ */
+export async function readFile(path: string): Promise<string> {
+  return invoke<string>('read_file', { path });
+}
+
+/**
+ * 写入文件内容
+ * @param path 文件绝对路径
+ * @param content 文件内容
+ */
+export async function writeFile(path: string, content: string): Promise<void> {
+  return invoke('write_file', { path, content });
 }

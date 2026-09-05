@@ -13,6 +13,7 @@ declare module 'vue' {
   export interface GlobalComponents {
     AddGroupModal: typeof import('./components/Modals/AddGroupModal.vue')['default']
     AddProjectModal: typeof import('./components/Modals/AddProjectModal.vue')['default']
+    CodeEditor: typeof import('./components/Editor/CodeEditor.vue')['default']
     ElAlert: typeof import('element-plus/es')['ElAlert']
     ElAside: typeof import('element-plus/es')['ElAside']
     ElButton: typeof import('element-plus/es')['ElButton']
@@ -20,6 +21,7 @@ declare module 'vue' {
     ElConfigProvider: typeof import('element-plus/es')['ElConfigProvider']
     ElContainer: typeof import('element-plus/es')['ElContainer']
     ElDialog: typeof import('element-plus/es')['ElDialog']
+    ElDivider: typeof import('element-plus/es')['ElDivider']
     ElDropdown: typeof import('element-plus/es')['ElDropdown']
     ElDropdownItem: typeof import('element-plus/es')['ElDropdownItem']
     ElDropdownMenu: typeof import('element-plus/es')['ElDropdownMenu']
@@ -33,13 +35,22 @@ declare module 'vue' {
     ElMain: typeof import('element-plus/es')['ElMain']
     ElMenu: typeof import('element-plus/es')['ElMenu']
     ElMenuItem: typeof import('element-plus/es')['ElMenuItem']
+    ElMenuItemGroup: typeof import('element-plus/es')['ElMenuItemGroup']
+    ElOption: typeof import('element-plus/es')['ElOption']
     ElProgress: typeof import('element-plus/es')['ElProgress']
     ElRadioButton: typeof import('element-plus/es')['ElRadioButton']
     ElRadioGroup: typeof import('element-plus/es')['ElRadioGroup']
+    ElScrollbar: typeof import('element-plus/es')['ElScrollbar']
+    ElSelect: typeof import('element-plus/es')['ElSelect']
     ElTable: typeof import('element-plus/es')['ElTable']
     ElTableColumn: typeof import('element-plus/es')['ElTableColumn']
     ElTag: typeof import('element-plus/es')['ElTag']
     ElTooltip: typeof import('element-plus/es')['ElTooltip']
+    ElTree: typeof import('element-plus/es')['ElTree']
+    FileTree: typeof import('./components/Explorer/FileTree.vue')['default']
+    GitGraphPanel: typeof import('./components/Git/GitGraphPanel.vue')['default']
+    GitGraphRail: typeof import('./components/Git/GitGraphRail.vue')['default']
+    GitHistoryModal: typeof import('./components/Modals/GitHistoryModal.vue')['default']
     GroupTree: typeof import('./components/Sidebar/GroupTree.vue')['default']
     OperationQueue: typeof import('./components/OperationPanel/OperationQueue.vue')['default']
     ProjectTable: typeof import('./components/ProjectList/ProjectTable.vue')['default']
@@ -49,5 +60,8 @@ declare module 'vue' {
     StatusBadge: typeof import('./components/ProjectList/StatusBadge.vue')['default']
     StatusChanges: typeof import('./components/ProjectList/StatusChanges.vue')['default']
     StatusIcon: typeof import('./components/OperationPanel/StatusIcon.vue')['default']
+  }
+  export interface GlobalDirectives {
+    vLoading: typeof import('element-plus/es')['ElLoadingDirective']
   }
 }

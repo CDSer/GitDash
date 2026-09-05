@@ -29,6 +29,8 @@ export const useAppStore = defineStore('app', () => {
   const selectedProjectIds = ref<Set<string>>(new Set());
   const activeGroupId = ref<string | null>(null);
   const searchQuery = ref('');
+  // 当前在工作区视图中打开的项目 ID（为 null 表示停留在项目列表视图）
+  const workspaceProjectId = ref<string | null>(null);
 
   // ========== Getters ==========
   
@@ -91,6 +93,13 @@ export const useAppStore = defineStore('app', () => {
     ];
     return [...all, ...groups.value.sort((a, b) => a.sort_order - b.sort_order)];
   });
+
+  /**
+   * 当前在工作区视图中打开的项目（可能为 null）
+   */
+  const workspaceProject = computed(() =>
+    projects.value.find(p => p.id === workspaceProjectId.value) ?? null
+  );
 
   // ========== Actions ==========
 
@@ -250,6 +259,21 @@ export const useAppStore = defineStore('app', () => {
   }
 
   /**
+   * 打开指定项目的工作区视图（整页，非弹窗）
+   * @param project 项目
+   */
+  function openWorkspace(project: Project) {
+    workspaceProjectId.value = project.id;
+  }
+
+  /**
+   * 关闭工作区，返回项目列表
+   */
+  function closeWorkspace() {
+    workspaceProjectId.value = null;
+  }
+
+  /**
    * 切换项目选中状态
    * @param projectId 项目 ID
    */
@@ -313,6 +337,8 @@ export const useAppStore = defineStore('app', () => {
     selectedProjectIds,
     activeGroupId,
     searchQuery,
+    workspaceProjectId,
+    workspaceProject,
     // Getters
     filteredProjects,
     selectedProjects,
@@ -330,6 +356,8 @@ export const useAppStore = defineStore('app', () => {
     toggleFavorite,
     updateStatus,
     toggleSelect,
+    openWorkspace,
+    closeWorkspace,
     selectAll,
     clearSelection,
     selectRange,

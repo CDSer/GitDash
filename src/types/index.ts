@@ -69,3 +69,41 @@ export interface OperationTask {
   message?: string;
   createdAt: number;
 }
+
+/** Git 分支 */
+export interface Branch {
+  name: string;
+  display_name: string;
+  is_local: boolean;
+  is_remote: boolean;
+  is_current: boolean;
+  upstream?: string;
+}
+
+/** Git 提交记录 */
+export interface Commit {
+  id: string;
+  short_id: string;
+  message: string;
+  author: string;
+  email: string;
+  date: number;
+  parents: string[];
+}
+
+/** 提交中的文件改动 */
+export interface CommitFile {
+  status: string;
+  path: string;
+}
+
+/** 提交详情 */
+export type CommitDetail = Commit & { body: string; files: CommitFile[] };
+
+/** 文件树节点（单层） */
+export interface FileNode {
+  name: string;
+  path: string;
+  is_dir: boolean;
+  has_children: boolean;
+}

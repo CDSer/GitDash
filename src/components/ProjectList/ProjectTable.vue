@@ -56,16 +56,25 @@
           </template>
         </el-table-column>
 
-        <el-table-column label="操作" width="100" align="center" fixed="right">
+        <el-table-column label="操作" width="150" align="center" fixed="right">
           <template #default="{ row }">
+            <el-button
+              text
+              size="small"
+              :icon="Monitor"
+              title="打开工作区"
+              @click.stop="enterWorkspace(row)"
+            />
             <el-dropdown trigger="click" @command="(command) => handleRowCommand(command, row)">
               <el-button text size="small" :icon="MoreFilled" title="更多操作" @click.stop />
               <template #dropdown>
                 <el-dropdown-menu>
+                  <el-dropdown-item command="workspace" :icon="Monitor">打开工作区</el-dropdown-item>
                   <el-dropdown-item command="open" :icon="FolderOpened">打开文件夹</el-dropdown-item>
                   <el-dropdown-item command="favorite" :icon="Star">
                     {{ row.is_favorite ? '取消收藏' : '设为收藏' }}
                   </el-dropdown-item>
+                  <el-dropdown-item command="history" :icon="Collection">Git 记录</el-dropdown-item>
 
                   <el-dropdown-item command="__title" divided disabled>移动到分组</el-dropdown-item>
                   <el-dropdown-item v-if="userGroups.length === 0" disabled>
@@ -141,12 +150,14 @@
         <el-button size="small" text @click="clearSelection">取消选择</el-button>
       </div>
     </div>
+
+    <GitHistoryModal v-model="showHistory" :project="historyProject" />
   </div>
 </template>
 
 <script setup lang="ts">
 import { computed, ref, onMounted, watch } from 'vue';
-import { Search, Star, Folder, FolderOpened, RefreshRight, Download, MoreFilled, Upload } from '@element-plus/icons-vue';
+import { Search, Star, Folder, FolderOpened, RefreshRight, Download, MoreFilled, Upload, Collection, Monitor } from '@element-plus/icons-vue';
 import { ElMessage } from 'element-plus';
 import type { Project, ProjectStatus } from '../../types';
 import { useAppStore } from '../../stores/appStore';
@@ -154,6 +165,7 @@ import { useOperationStore } from '../../stores/operationStore';
 import { openRepoFolder } from '../../lib/tauriApi';
 import StatusBadge from './StatusBadge.vue';
 import StatusChanges from './StatusChanges.vue';
+import GitHistoryModal from '../Modals/GitHistoryModal.vue';
 import { useProjectStatus } from '../../composables/useProjectStatus';
 
 const appStore = useAppStore();
@@ -161,6 +173,8 @@ const operationStore = useOperationStore();
 const { getStatus } = useProjectStatus();
 
 const tableRef = ref();
+const showHistory = ref(false);
+const historyProject = ref<Project | null>(null);
 
 const statusFor = (projectId: string): ProjectStatus | null => appStore.statuses.get(projectId) ?? null;
 
@@ -198,10 +212,19 @@ function groupName(groupId: string | null) {
 
 /**
  * 单行操作菜单
- * command 约定：open / favorite / move:<分组ID> / move:none
+ * command 约定：open / favorite / history / move:<分组ID> / move:none
  */
+function enterWorkspace(row: unknown) {
+  appStore.openWorkspace(row as Project);
+}
+
 function handleRowCommand(command: string, row: unknown) {
   const project = row as Project;
+
+  if (command === 'workspace') {
+    appStore.openWorkspace(project);
+    return;
+  }
 
   if (command === 'open') {
     openRepo(project);
@@ -210,6 +233,12 @@ function handleRowCommand(command: string, row: unknown) {
 
   if (command === 'favorite') {
     appStore.toggleFavorite(project.id);
+    return;
+  }
+
+  if (command === 'history') {
+    historyProject.value = project;
+    showHistory.value = true;
     return;
   }
 
