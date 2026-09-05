@@ -1,66 +1,83 @@
 <!--
   分组树组件
   显示所有分组（全部 / 收藏 / 未分组 / 自定义分组）
-  支持点击切换当前分组、添加分组
+  支持点击切换当前分组、右键重命名 / 删除
 -->
 <template>
-  <div class="group-tree">
-    <div class="tree-header">
-      <div class="brand">GitDash</div>
-      <el-button type="primary" plain :icon="Plus" class="add-btn" @click="openAddGroup">
-        添加分组
-      </el-button>
+  <div class="flex h-full flex-col">
+    <div class="border-b border-border p-3">
+      <div class="mb-3 text-sm font-semibold">GitDash</div>
+      <Button variant="outline" class="w-full" @click="openAddGroup">
+        <Plus :size="14" /> 添加分组
+      </Button>
     </div>
 
-    <el-menu
-      class="group-menu"
-      :default-active="activeGroupId ?? ''"
-      @select="selectGroup"
-    >
-      <el-menu-item v-for="group in allGroups" :key="group.id" :index="group.id">
-        <el-dropdown
-          v-if="isUserGroup(group.id)"
-          trigger="contextmenu"
-          placement="bottom-start"
-          @command="(cmd) => handleGroupCommand(cmd, group)"
-        >
-          <span class="menu-item-content">
-            <span class="group-dot" :style="{ backgroundColor: group.color }"></span>
-            <span class="group-name">{{ group.name }}</span>
-            <span class="group-count">{{ getGroupCount(group.id) }}</span>
-          </span>
-          <template #dropdown>
-            <el-dropdown-menu>
-              <el-dropdown-item :icon="EditPen" command="rename">重命名</el-dropdown-item>
-              <el-dropdown-item :icon="Delete" command="delete" divided>删除</el-dropdown-item>
-            </el-dropdown-menu>
+    <div class="min-h-0 flex-1 overflow-y-auto p-1.5">
+      <div
+        v-for="group in allGroups"
+        :key="group.id"
+        :class="[
+          'group-row',
+          activeGroupId === group.id ? 'group-row--active' : '',
+        ]"
+        @click="selectGroup(group.id)"
+      >
+        <Dropdown v-if="isUserGroup(group.id)" trigger="contextmenu">
+          <template #trigger>
+            <span class="group-row-inner">
+              <span class="group-dot" :style="{ backgroundColor: group.color }" />
+              <span class="group-name">{{ group.name }}</span>
+              <span class="group-count">{{ getGroupCount(group.id) }}</span>
+            </span>
           </template>
-        </el-dropdown>
+          <DropdownItem :icon="Pencil" @click="startRename(group)">重命名</DropdownItem>
+          <DropdownItem danger :icon="Trash2" @click="askDelete(group)">删除</DropdownItem>
+        </Dropdown>
 
-        <template v-else>
-          <span class="group-dot" :style="{ backgroundColor: group.color }"></span>
+        <span v-else class="group-row-inner">
+          <span class="group-dot" :style="{ backgroundColor: group.color }" />
           <span class="group-name">{{ group.name }}</span>
           <span class="group-count">{{ getGroupCount(group.id) }}</span>
-        </template>
-      </el-menu-item>
-    </el-menu>
+        </span>
+      </div>
+    </div>
 
     <AddGroupModal v-model="groupModalVisible" :group="editingGroup" @saved="handleGroupSaved" />
+    <ConfirmDialog
+      v-model="confirmOpen"
+      title="删除分组"
+      :message="confirmMessage"
+      confirm-text="删除"
+      danger
+      @confirm="doDelete"
+    />
   </div>
 </template>
 
 <script setup lang="ts">
 import { computed, ref } from 'vue';
-import { Plus, EditPen, Delete } from '@element-plus/icons-vue';
-import { ElMessage, ElMessageBox } from 'element-plus';
+import { Plus, Pencil, Trash2 } from 'lucide-vue-next';
 import { useAppStore } from '../../stores/appStore';
 import type { Group } from '../../types';
 import AddGroupModal from '../Modals/AddGroupModal.vue';
+import Button from '../ui/Button.vue';
+import Dropdown from '../ui/Dropdown.vue';
+import DropdownItem from '../ui/DropdownItem.vue';
+import ConfirmDialog from '../ui/ConfirmDialog.vue';
+import { toast } from '../../lib/toast';
 
 const appStore = useAppStore();
 
 const groupModalVisible = ref(false);
 const editingGroup = ref<Group | null>(null);
+const confirmOpen = ref(false);
+const pendingDelete = ref<Group | null>(null);
+
+const confirmMessage = computed(() =>
+  pendingDelete.value
+    ? `确定要删除分组「${pendingDelete.value.name}」吗？该分组下的项目会被移动到「未分组」。`
+    : '',
+);
 
 const allGroups = computed(() => appStore.allGroups);
 const activeGroupId = computed(() => appStore.activeGroupId);
@@ -70,24 +87,17 @@ function selectGroup(groupId: string) {
 }
 
 function getGroupCount(groupId: string) {
-  if (groupId === 'all') {
-    return appStore.projects.length;
-  } else if (groupId === 'favorites') {
-    return appStore.projects.filter(p => p.is_favorite).length;
-  } else if (groupId === 'untagged') {
-    return appStore.projects.filter(p => !p.group_id).length;
-  } else {
-    return appStore.projects.filter(p => p.group_id === groupId).length;
-  }
+  if (groupId === 'all') return appStore.projects.length;
+  if (groupId === 'favorites') return appStore.projects.filter((p) => p.is_favorite).length;
+  if (groupId === 'untagged') return appStore.projects.filter((p) => !p.group_id).length;
+  return appStore.projects.filter((p) => p.group_id === groupId).length;
 }
 
-/** 打开「添加分组」弹窗 */
 function openAddGroup() {
   editingGroup.value = null;
   groupModalVisible.value = true;
 }
 
-/** 打开「重命名分组」弹窗 */
 function startRename(group: Group) {
   editingGroup.value = group;
   groupModalVisible.value = true;
@@ -97,112 +107,67 @@ function handleGroupSaved() {
   groupModalVisible.value = false;
 }
 
-/** 「全部 / 收藏 / 未分组」是系统虚拟分组，不可删除/重命名 */
 function isUserGroup(groupId: string) {
   return !['all', 'favorites', 'untagged'].includes(groupId);
 }
 
-/** 右键菜单命令分发 */
-function handleGroupCommand(command: unknown, group: Group) {
-  if (command === 'rename') {
-    startRename(group);
-  } else if (command === 'delete') {
-    handleDeleteGroup(group);
-  }
+function askDelete(group: Group) {
+  pendingDelete.value = group;
+  confirmOpen.value = true;
 }
 
-/** 删除自建分组（该分组下的项目会变为未分组） */
-async function handleDeleteGroup(group: Group) {
-  const count = getGroupCount(group.id);
-
-  try {
-    await ElMessageBox.confirm(
-      `确定删除分组「${group.name}」吗？该分组下的 ${count} 个项目会变为「未分组」，此操作不可撤销。`,
-      '删除分组',
-      { type: 'warning', confirmButtonText: '删除', cancelButtonText: '取消', closeOnClickModal: false }
-    );
-  } catch {
-    return; // 用户点了取消
-  }
-
+async function doDelete() {
+  const group = pendingDelete.value;
+  if (!group) return;
   try {
     await appStore.removeGroup(group.id);
-    ElMessage.success(`已删除分组「${group.name}」`);
+    toast.success(`已删除分组「${group.name}」`);
   } catch (error) {
     console.error('删除分组失败：', error);
-    ElMessage.error('删除分组失败');
+    toast.error('删除分组失败');
+  } finally {
+    pendingDelete.value = null;
   }
 }
 </script>
 
 <style scoped>
-.group-tree {
-  height: 100%;
-  display: flex;
-  flex-direction: column;
+.group-row {
+  border-radius: 6px;
+  cursor: pointer;
+  color: var(--muted-foreground);
 }
-
-.tree-header {
-  padding: 12px;
-  border-bottom: 1px solid var(--el-border-color);
+.group-row:hover {
+  background-color: var(--accent);
+  color: var(--accent-foreground);
 }
-
-.brand {
-  margin-bottom: 12px;
-  font-size: 14px;
-  font-weight: 600;
-  color: var(--el-text-color-primary);
+.group-row--active {
+  background-color: color-mix(in oklab, var(--primary) 16%, transparent);
+  color: var(--primary);
 }
-
-.add-btn {
-  width: 100%;
-}
-
-.group-menu {
-  flex: 1;
-  overflow-y: auto;
-  border-right: none;
-  background-color: transparent;
-}
-
-.group-menu :deep(.el-menu-item) {
-  height: 36px;
-  line-height: 36px;
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding-right: 12px !important;
-}
-
-.group-menu :deep(.el-dropdown) {
-  display: block;
-  width: 100%;
-}
-
-.menu-item-content {
+.group-row-inner {
   display: flex;
   align-items: center;
   gap: 8px;
   width: 100%;
+  padding: 7px 10px;
   outline: none;
 }
-
 .group-dot {
   width: 10px;
   height: 10px;
   border-radius: 50%;
   flex-shrink: 0;
 }
-
 .group-name {
   flex: 1;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+  font-size: 13px;
 }
-
 .group-count {
   font-size: 12px;
-  color: var(--el-text-color-secondary);
+  opacity: 0.7;
 }
 </style>

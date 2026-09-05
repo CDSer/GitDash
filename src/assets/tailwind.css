@@ -1,64 +1,138 @@
 @import "tailwindcss";
 
-@theme {
-  --color-primary: #3b82f6;
-  --color-primary-hover: #2563eb;
+/* GitDash 设计令牌（参照 terax「源码内嵌 + Tailwind」方式）
+   颜色通过 CSS 变量定义 light/dark，再用 @theme inline 映射到 Tailwind 工具类，
+   从而可直接使用 bg-background / text-foreground / border-border / bg-muted 等。 */
+@custom-variant dark (&:is(.dark *));
+
+@theme inline {
+  --font-sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue",
+    Arial, "PingFang SC", "Microsoft YaHei", sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-destructive-foreground: var(--destructive-foreground);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+
+  --radius-sm: calc(var(--radius) * 0.6);
+  --radius-md: calc(var(--radius) * 0.8);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) * 1.2);
 }
 
-/* GitDash 全局样式
-   组件一律使用 Element Plus，Tailwind 仅用于少量布局辅助 */
-
-*,
-*::before,
-*::after {
-  box-sizing: border-box;
+:root {
+  --background: oklch(1 0 0);
+  --foreground: oklch(0.205 0 0);
+  --card: oklch(1 0 0);
+  --card-foreground: oklch(0.205 0 0);
+  --popover: oklch(1 0 0);
+  --popover-foreground: oklch(0.205 0 0);
+  --primary: oklch(0.55 0.2 264);
+  --primary-foreground: oklch(0.985 0 0);
+  --secondary: oklch(0.96 0.005 250);
+  --secondary-foreground: oklch(0.25 0.02 260);
+  --muted: oklch(0.96 0.005 250);
+  --muted-foreground: oklch(0.55 0.02 260);
+  --accent: oklch(0.94 0.01 260);
+  --accent-foreground: oklch(0.25 0.02 260);
+  --destructive: oklch(0.58 0.22 27);
+  --destructive-foreground: oklch(0.985 0 0);
+  --border: oklch(0.9 0.01 250);
+  --input: oklch(0.9 0.01 250);
+  --ring: oklch(0.55 0.2 264);
+  --radius: 0.5rem;
 }
 
-html,
-body {
-  margin: 0;
-  padding: 0;
-  height: 100%;
+.dark {
+  --background: oklch(0.18 0.01 264);
+  --foreground: oklch(0.95 0.005 264);
+  --card: oklch(0.22 0.012 264);
+  --card-foreground: oklch(0.95 0.005 264);
+  --popover: oklch(0.22 0.012 264);
+  --popover-foreground: oklch(0.95 0.005 264);
+  --primary: oklch(0.65 0.18 264);
+  --primary-foreground: oklch(0.18 0.01 264);
+  --secondary: oklch(0.28 0.015 264);
+  --secondary-foreground: oklch(0.95 0.005 264);
+  --muted: oklch(0.28 0.015 264);
+  --muted-foreground: oklch(0.7 0.02 264);
+  --accent: oklch(0.32 0.02 264);
+  --accent-foreground: oklch(0.98 0.005 264);
+  --destructive: oklch(0.7 0.19 27);
+  --destructive-foreground: oklch(0.98 0.005 264);
+  --border: oklch(1 0 0 / 12%);
+  --input: oklch(1 0 0 / 16%);
+  --ring: oklch(0.65 0.18 264);
 }
 
-ul,
-ol,
-li {
-  margin: 0;
-  padding: 0;
-  list-style: none;
+@layer base {
+  * {
+    border-color: var(--border);
+  }
+
+  html,
+  body,
+  #app {
+    height: 100%;
+    margin: 0;
+  }
+
+  body {
+    background-color: var(--background);
+    color: var(--foreground);
+    font-family: var(--font-sans);
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    overflow: hidden;
+  }
+
+  /* 桌面端禁用原生右键菜单，统一使用自定义菜单 */
+  #app {
+    user-select: none;
+  }
 }
 
-body {
-  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial,
-    'PingFang SC', 'Microsoft YaHei', sans-serif;
-  -webkit-font-smoothing: antialiased;
-  -moz-osx-font-smoothing: grayscale;
-  overflow: hidden;
-  background-color: var(--el-bg-color);
-  color: var(--el-text-color-primary);
+/* 细滚动条（桌面应用需要可见滚动提示） */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--border) transparent;
 }
-
-#app {
-  height: 100vh;
-  width: 100vw;
-}
-
-/* 滚动条样式 */
-::-webkit-scrollbar {
+*::-webkit-scrollbar {
   width: 8px;
   height: 8px;
 }
-
-::-webkit-scrollbar-track {
+*::-webkit-scrollbar-track {
   background: transparent;
 }
-
-::-webkit-scrollbar-thumb {
-  background: var(--el-border-color);
+*::-webkit-scrollbar-thumb {
+  background: var(--border);
   border-radius: 4px;
 }
+*::-webkit-scrollbar-thumb:hover {
+  background: var(--muted-foreground);
+}
 
-::-webkit-scrollbar-thumb:hover {
-  background: var(--el-text-color-secondary);
+.no-scrollbar {
+  scrollbar-width: none;
+}
+.no-scrollbar::-webkit-scrollbar {
+  width: 0;
+  height: 0;
+  display: none;
 }

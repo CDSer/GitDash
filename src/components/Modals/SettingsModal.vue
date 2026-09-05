@@ -3,66 +3,90 @@
   配置 Git 路径、自动 Fetch 间隔、并发数、主题、全局快捷键
 -->
 <template>
-  <el-dialog
-    v-model="visible"
-    title="设置"
-    width="540px"
-    append-to-body
-  >
-    <el-form label-width="150px" @submit.prevent>
-      <el-form-item label="Git 可执行文件路径">
-        <div class="git-path-row">
-          <el-input v-model="gitPath" placeholder="留空以自动检测" />
-          <el-button @click="selectGitPath">浏览</el-button>
+  <Dialog v-model="visible" title="设置" width="540px">
+    <div class="space-y-4">
+      <div class="form-item">
+        <label class="form-label">Git 可执行文件路径</label>
+        <div class="flex items-center gap-2">
+          <Input v-model="gitPath" placeholder="留空以自动检测" class="flex-1" />
+          <Button variant="outline" @click="selectGitPath">浏览</Button>
         </div>
-        <div class="form-tip">留空则使用系统 PATH</div>
-      </el-form-item>
+        <p class="form-tip">留空则使用系统 PATH</p>
+      </div>
 
-      <el-form-item label="自动获取间隔">
-        <el-input-number
-          v-model="settings.auto_fetch_interval"
-          :min="10"
-          :max="300"
-          :step="5"
-        />
-        <span class="form-tip-inline">秒（10 - 300）</span>
-      </el-form-item>
+      <div class="form-item">
+        <label class="form-label">自动获取间隔</label>
+        <div class="flex items-center gap-2">
+          <Input
+            type="number"
+            :min="10"
+            :max="300"
+            :step="5"
+            :model-value="String(settings.auto_fetch_interval)"
+            @update:model-value="(v: string) => (settings.auto_fetch_interval = clampInt(v, 10, 300, 30))"
+            class="w-32"
+          />
+          <span class="form-tip-inline">秒（10 - 300）</span>
+        </div>
+      </div>
 
-      <el-form-item label="最大并发 Git 操作数">
-        <el-input-number
-          v-model="settings.max_concurrent_git"
-          :min="1"
-          :max="10"
-        />
-        <span class="form-tip-inline">推荐 2 - 5</span>
-      </el-form-item>
+      <div class="form-item">
+        <label class="form-label">最大并发 Git 操作数</label>
+        <div class="flex items-center gap-2">
+          <Input
+            type="number"
+            :min="1"
+            :max="10"
+            :model-value="String(settings.max_concurrent_git)"
+            @update:model-value="(v: string) => (settings.max_concurrent_git = clampInt(v, 1, 10, 3))"
+            class="w-32"
+          />
+          <span class="form-tip-inline">推荐 2 - 5</span>
+        </div>
+      </div>
 
-      <el-form-item label="主题">
-        <el-radio-group :model-value="settings.theme" @change="handleThemeChange">
-          <el-radio-button v-for="option in themeOptions" :key="option" :value="option">
+      <div class="form-item">
+        <label class="form-label">主题</label>
+        <div class="inline-flex rounded-md border border-border p-0.5">
+          <button
+            v-for="option in themeOptions"
+            :key="option"
+            type="button"
+            :class="[
+              'rounded px-3 py-1 text-[13px] transition-colors',
+              settings.theme === option
+                ? 'bg-primary text-primary-foreground'
+                : 'text-muted-foreground hover:bg-accent',
+            ]"
+            @click="settings.theme = option"
+          >
             {{ themeLabels[option] }}
-          </el-radio-button>
-        </el-radio-group>
-      </el-form-item>
+          </button>
+        </div>
+      </div>
 
-      <el-form-item label="全局快捷键">
-        <el-input v-model="settings.global_shortcut" placeholder="CmdOrControl+Shift+G" />
-        <div class="form-tip">示例：CmdOrControl+Shift+G</div>
-      </el-form-item>
-    </el-form>
+      <div class="form-item">
+        <label class="form-label">全局快捷键</label>
+        <Input v-model="settings.global_shortcut" placeholder="CmdOrControl+Shift+G" class="max-w-xs" />
+        <p class="form-tip">示例：CmdOrControl+Shift+G</p>
+      </div>
+    </div>
 
     <template #footer>
-      <el-button @click="visible = false">关闭</el-button>
-      <el-button type="primary" @click="saveSettings">保存</el-button>
+      <Button variant="ghost" @click="visible = false">关闭</Button>
+      <Button variant="primary" @click="saveSettings">保存</Button>
     </template>
-  </el-dialog>
+  </Dialog>
 </template>
 
 <script setup lang="ts">
 import { computed } from 'vue';
-import type { Settings } from '../../types';
 import { useAppStore } from '../../stores/appStore';
 import { open } from '@tauri-apps/plugin-dialog';
+import { toast } from '../../lib/toast';
+import Dialog from '../ui/Dialog.vue';
+import Input from '../ui/Input.vue';
+import Button from '../ui/Button.vue';
 
 const visible = defineModel<boolean>({ required: true });
 
@@ -70,7 +94,7 @@ const appStore = useAppStore();
 
 const settings = computed({
   get: () => appStore.settings,
-  set: (value) => appStore.settings = value
+  set: (value) => (appStore.settings = value),
 });
 
 const themeOptions = ['system', 'light', 'dark'] as const;
@@ -83,53 +107,55 @@ const themeLabels: Record<string, string> = {
 
 const gitPath = computed({
   get: () => appStore.settings.git_path || '',
-  set: (value) => appStore.settings.git_path = value || null
+  set: (value) => (appStore.settings.git_path = value || null),
 });
+
+function clampInt(v: string, min: number, max: number, fallback: number): number {
+  const n = parseInt(v, 10);
+  if (Number.isNaN(n)) return fallback;
+  return Math.min(max, Math.max(min, n));
+}
 
 async function selectGitPath() {
   try {
     const selected = await open({
       directory: false,
       multiple: false,
-      title: '选择 Git 可执行文件'
+      title: '选择 Git 可执行文件',
     });
-
-    if (selected) {
-      gitPath.value = selected as string;
-    }
+    if (selected) gitPath.value = selected as string;
   } catch (err) {
     console.error('选择 Git 路径失败：', err);
   }
 }
 
-function handleThemeChange(value?: string | number | boolean) {
-  settings.value.theme = value as Settings['theme'];
-}
-
-function saveSettings() {
-  // 设置项的持久化需要后端 update_settings 命令，尚未接入
-  visible.value = false;
+async function saveSettings() {
+  try {
+    await appStore.saveSettings();
+    visible.value = false;
+  } catch (err) {
+    toast.error('保存设置失败：' + (err as Error).message);
+  }
 }
 </script>
 
 <style scoped>
-.git-path-row {
+.form-item {
   display: flex;
-  align-items: center;
-  gap: 8px;
-  width: 100%;
+  flex-direction: column;
+  gap: 6px;
 }
-
+.form-label {
+  font-size: 13px;
+  font-weight: 500;
+}
 .form-tip {
-  margin-top: 4px;
   font-size: 12px;
   line-height: 1.4;
-  color: var(--el-text-color-secondary);
+  color: var(--muted-foreground);
 }
-
 .form-tip-inline {
-  margin-left: 8px;
   font-size: 12px;
-  color: var(--el-text-color-secondary);
+  color: var(--muted-foreground);
 }
 </style>

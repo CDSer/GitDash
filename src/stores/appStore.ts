@@ -12,6 +12,7 @@ import {
   addGroup as addGroupApi,
   removeGroup as removeGroupApi,
   updateGroups as updateGroupsApi,
+  updateSettings as updateSettingsApi,
 } from '../lib/tauriApi';
 
 export const useAppStore = defineStore('app', () => {
@@ -259,6 +260,18 @@ export const useAppStore = defineStore('app', () => {
   }
 
   /**
+   * 保存应用设置（调用后端 update_settings 命令并落盘）
+   * 空字符串的 git_path 会被转成 null 再发送
+   */
+  async function saveSettings() {
+    const payload: Settings = { ...settings.value };
+    if (payload.git_path === '') {
+      payload.git_path = null;
+    }
+    await updateSettingsApi(payload);
+  }
+
+  /**
    * 打开指定项目的工作区视图（整页，非弹窗）
    * @param project 项目
    */
@@ -355,6 +368,7 @@ export const useAppStore = defineStore('app', () => {
     moveProjectsToGroup,
     toggleFavorite,
     updateStatus,
+    saveSettings,
     toggleSelect,
     openWorkspace,
     closeWorkspace,

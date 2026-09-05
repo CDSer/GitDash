@@ -1,78 +1,80 @@
 <!--
   Git 历史视图弹窗
-  左侧分支列表 / 中间提交列表 / 右侧提交详情，类似 SourceTree 的提交历史
+  左侧分支列表 / 中间提交列表 / 右侧提交详情
 -->
 <template>
-  <el-dialog
-    v-model="visible"
-    title="Git 记录"
-    width="900px"
-    :close-on-click-modal="false"
-    append-to-body
-    destroy-on-close
-    class="git-history-dialog"
-  >
-    <el-container class="history-container">
+  <Dialog v-model="visible" title="Git 记录" width="900px">
+    <div class="history-container">
       <!-- 左侧分支 -->
-      <el-aside width="200px" class="history-aside">
+      <aside class="history-aside">
         <div class="aside-title">分支</div>
-        <el-scrollbar class="branch-list">
-          <el-menu
-            :default-active="selectedBranch"
-            class="branch-menu"
-            @select="selectBranch"
-          >
-            <el-menu-item-group v-if="localBranches.length" title="本地">
-              <el-menu-item
-                v-for="branch in localBranches"
-                :key="branch.name"
-                :index="branch.display_name"
-              >
-                <span class="branch-name" :title="branch.display_name">{{ branch.display_name }}</span>
-                <el-tag v-if="branch.is_current" size="small" class="current-tag">当前</el-tag>
-              </el-menu-item>
-            </el-menu-item-group>
-            <el-menu-item-group v-if="remoteBranches.length" title="远程">
-              <el-menu-item
-                v-for="branch in remoteBranches"
-                :key="branch.name"
-                :index="branch.display_name"
-              >
-                <span class="branch-name" :title="branch.display_name">{{ branch.display_name }}</span>
-              </el-menu-item>
-            </el-menu-item-group>
-            <el-empty v-if="!branches.length" description="暂无分支" :image-size="60" />
-          </el-menu>
-        </el-scrollbar>
-      </el-aside>
+        <div class="branch-list">
+          <template v-if="localBranches.length">
+            <div class="branch-group-title">本地</div>
+            <button
+              v-for="branch in localBranches"
+              :key="branch.name"
+              type="button"
+              :class="['branch-item', selectedBranch === branch.display_name ? 'branch-item--active' : '']"
+              @click="selectBranch(branch.display_name)"
+            >
+              <span class="branch-name" :title="branch.display_name">{{ branch.display_name }}</span>
+              <Tag v-if="branch.is_current" variant="success">当前</Tag>
+            </button>
+          </template>
+          <template v-if="remoteBranches.length">
+            <div class="branch-group-title">远程</div>
+            <button
+              v-for="branch in remoteBranches"
+              :key="branch.name"
+              type="button"
+              :class="['branch-item', selectedBranch === branch.display_name ? 'branch-item--active' : '']"
+              @click="selectBranch(branch.display_name)"
+            >
+              <span class="branch-name" :title="branch.display_name">{{ branch.display_name }}</span>
+            </button>
+          </template>
+          <Empty v-if="!branches.length" description="暂无分支" />
+        </div>
+      </aside>
 
       <!-- 中间提交列表 -->
-      <el-main class="history-main">
-        <el-table
-          v-loading="loadingCommits"
-          :data="commits"
-          height="520"
-          highlight-current-row
-          @current-change="handleCommitChange"
-        >
-          <el-table-column prop="short_id" label="ID" width="70" />
-          <el-table-column prop="message" label="提交信息" min-width="220" show-overflow-tooltip />
-          <el-table-column prop="author" label="作者" width="100" show-overflow-tooltip />
-          <el-table-column label="时间" width="150">
-            <template #default="{ row }">
-              {{ formatDate(row.date) }}
-            </template>
-          </el-table-column>
-          <template #empty>
-            <el-empty description="暂无提交记录" :image-size="60" />
-          </template>
-        </el-table>
-      </el-main>
+      <main class="history-main">
+        <div v-if="loadingCommits" class="flex h-full items-center justify-center">
+          <Spinner size="lg" />
+        </div>
+        <template v-else>
+          <div
+            class="commit-head"
+            style="grid-template-columns: 80px minmax(0, 1fr) 110px 150px"
+          >
+            <div>ID</div>
+            <div>提交信息</div>
+            <div>作者</div>
+            <div>时间</div>
+          </div>
+          <div class="commit-list">
+            <div
+              v-for="commit in commits"
+              :key="commit.id"
+              :class="['commit-row', selectedCommit?.id === commit.id ? 'commit-row--active' : '']"
+              style="grid-template-columns: 80px minmax(0, 1fr) 110px 150px"
+              @click="handleCommitChange(commit)"
+            >
+              <div class="commit-id font-mono">{{ commit.short_id }}</div>
+              <div class="commit-msg" :title="commit.message">{{ firstLine(commit.message) }}</div>
+              <div class="commit-author truncate">{{ commit.author }}</div>
+              <div class="commit-date">{{ formatDate(commit.date) }}</div>
+            </div>
+            <Empty v-if="!commits.length" description="暂无提交记录" />
+          </div>
+        </template>
+      </main>
 
       <!-- 右侧详情 -->
-      <el-aside width="260px" class="history-aside detail-aside">
+      <aside class="history-aside detail-aside">
         <div class="aside-title">提交详情</div>
-        <el-scrollbar v-if="detail" class="detail-scroll">
+        <div v-if="detail" class="detail-scroll">
           <div class="detail-section">
             <div class="detail-label">提交信息</div>
             <div class="detail-message">{{ detail.message }}</div>
@@ -103,22 +105,26 @@
             <div class="detail-label">改动文件</div>
             <div v-if="!detail.files.length" class="detail-empty">无文件改动</div>
             <div v-for="f in detail.files" :key="f.path" class="detail-file">
-              <el-tag :type="statusType(f.status)" size="small" class="file-status">{{ f.status }}</el-tag>
+              <Tag :variant="statusVariant(f.status)" class="file-status">{{ f.status }}</Tag>
               <span class="file-path" :title="f.path">{{ f.path }}</span>
             </div>
           </div>
-        </el-scrollbar>
-        <el-empty v-else description="选择一条提交查看详情" :image-size="60" />
-      </el-aside>
-    </el-container>
-  </el-dialog>
+        </div>
+        <Empty v-else description="选择一条提交查看详情" />
+      </aside>
+    </div>
+  </Dialog>
 </template>
 
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue';
-import { ElMessage } from 'element-plus';
 import type { Branch, Commit, CommitDetail, Project } from '../../types';
 import { getBranches, getCommits, getCommitDetail } from '../../lib/tauriApi';
+import Dialog from '../ui/Dialog.vue';
+import Tag from '../ui/Tag.vue';
+import Spinner from '../ui/Spinner.vue';
+import Empty from '../ui/Empty.vue';
+import { toast } from '../../lib/toast';
 
 const visible = defineModel<boolean>({ required: true });
 const props = defineProps<{ project: Project | null }>();
@@ -130,8 +136,8 @@ const selectedCommit = ref<Commit | null>(null);
 const detail = ref<CommitDetail | null>(null);
 const loadingCommits = ref(false);
 
-const localBranches = computed(() => branches.value.filter(b => b.is_local));
-const remoteBranches = computed(() => branches.value.filter(b => b.is_remote));
+const localBranches = computed(() => branches.value.filter((b) => b.is_local));
+const remoteBranches = computed(() => branches.value.filter((b) => b.is_remote));
 
 watch(visible, async (open) => {
   if (open && props.project) {
@@ -153,11 +159,11 @@ watch(selectedBranch, async (branch) => {
 async function loadBranches() {
   try {
     branches.value = await getBranches(props.project!.id);
-    const current = branches.value.find(b => b.is_current);
+    const current = branches.value.find((b) => b.is_current);
     selectedBranch.value = current?.display_name || branches.value[0]?.display_name || '';
   } catch (error) {
     console.error('加载分支失败：', error);
-    ElMessage.error('加载分支失败');
+    toast.error('加载分支失败');
   }
 }
 
@@ -167,7 +173,7 @@ async function loadCommits(branch: string) {
     commits.value = await getCommits(props.project!.id, branch, 100);
   } catch (error) {
     console.error('加载提交记录失败：', error);
-    ElMessage.error('加载提交记录失败');
+    toast.error('加载提交记录失败');
   } finally {
     loadingCommits.value = false;
   }
@@ -177,13 +183,9 @@ function selectBranch(branch: string) {
   selectedBranch.value = branch;
 }
 
-function handleCommitChange(commit: Commit | null, _oldCommit: Commit | null) {
+function handleCommitChange(commit: Commit) {
   selectedCommit.value = commit;
-  if (commit) {
-    loadCommitDetail(commit.id);
-  } else {
-    detail.value = null;
-  }
+  loadCommitDetail(commit.id);
 }
 
 async function loadCommitDetail(commitId: string) {
@@ -191,151 +193,202 @@ async function loadCommitDetail(commitId: string) {
     detail.value = await getCommitDetail(props.project!.id, commitId);
   } catch (error) {
     console.error('加载提交详情失败：', error);
-    ElMessage.error('加载提交详情失败');
+    toast.error('加载提交详情失败');
   }
 }
 
-function formatDate(ts: number) {
-  return new Date(ts).toLocaleString('zh-CN', {
-    year: 'numeric',
-    month: '2-digit',
-    day: '2-digit',
-    hour: '2-digit',
-    minute: '2-digit',
-  });
+function firstLine(msg: string): string {
+  return msg.split('\n')[0] || '(无说明)';
 }
 
-function statusType(status: string): 'success' | 'danger' | 'warning' | 'info' {
+function pad(n: number): string {
+  return n < 10 ? '0' + n : '' + n;
+}
+
+function formatDate(ts: number) {
+  // 后端返回 unix 秒
+  const d = new Date(ts * 1000);
+  return `${d.getFullYear()}/${pad(d.getMonth() + 1)}/${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
+}
+
+function statusVariant(status: string): 'success' | 'danger' | 'warning' | 'info' {
   switch (status.charAt(0)) {
-    case 'A': return 'success';
-    case 'D': return 'danger';
-    case 'M': return 'warning';
-    case 'R':
-    case 'C': return 'info';
-    default: return 'info';
+    case 'A':
+      return 'success';
+    case 'D':
+      return 'danger';
+    case 'M':
+      return 'warning';
+    default:
+      return 'info';
   }
 }
 </script>
 
 <style scoped>
 .history-container {
+  display: flex;
   height: 560px;
-  border: 1px solid var(--el-border-color);
-  border-radius: 4px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
   overflow: hidden;
 }
-
 .history-aside {
   display: flex;
   flex-direction: column;
-  background-color: var(--el-fill-color-light);
-  border-right: 1px solid var(--el-border-color);
+  width: 200px;
+  flex-shrink: 0;
+  background-color: var(--muted);
+  border-right: 1px solid var(--border);
 }
-
 .detail-aside {
   border-right: none;
-  border-left: 1px solid var(--el-border-color);
+  border-left: 1px solid var(--border);
+  width: 260px;
 }
-
 .aside-title {
   padding: 10px 12px;
   font-size: 13px;
   font-weight: 600;
-  color: var(--el-text-color-primary);
-  border-bottom: 1px solid var(--el-border-color);
+  border-bottom: 1px solid var(--border);
   flex-shrink: 0;
 }
-
 .branch-list {
   flex: 1;
+  overflow-y: auto;
+  padding: 4px;
 }
-
-.branch-menu {
-  border-right: none;
-  background-color: transparent;
+.branch-group-title {
+  padding: 6px 8px 2px;
+  font-size: 11px;
+  color: var(--muted-foreground);
 }
-
-.branch-menu :deep(.el-menu-item) {
-  height: 32px;
-  line-height: 32px;
+.branch-item {
   display: flex;
   align-items: center;
   gap: 6px;
-  padding: 0 12px !important;
+  width: 100%;
+  padding: 6px 8px;
+  font-size: 13px;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--foreground);
+  text-align: left;
+  cursor: pointer;
 }
-
+.branch-item:hover {
+  background-color: var(--accent);
+}
+.branch-item--active {
+  background-color: color-mix(in oklab, var(--primary) 18%, transparent);
+  color: var(--primary);
+}
 .branch-name {
   flex: 1;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-
-.current-tag {
-  flex-shrink: 0;
-}
-
 .history-main {
-  padding: 0;
+  flex: 1;
+  min-width: 0;
   display: flex;
   flex-direction: column;
 }
-
+.commit-head {
+  display: grid;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--muted-foreground);
+  border-bottom: 1px solid var(--border);
+  flex-shrink: 0;
+}
+.commit-list {
+  flex: 1;
+  overflow-y: auto;
+  min-height: 0;
+}
+.commit-row {
+  display: grid;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  font-size: 13px;
+  border-bottom: 1px solid var(--border);
+  cursor: pointer;
+}
+.commit-row:hover {
+  background-color: var(--accent);
+}
+.commit-row--active {
+  background-color: color-mix(in oklab, var(--primary) 14%, transparent);
+}
+.commit-id {
+  color: var(--muted-foreground);
+}
+.commit-msg {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.commit-author {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--muted-foreground);
+}
+.commit-date {
+  color: var(--muted-foreground);
+  font-variant-numeric: tabular-nums;
+}
 .detail-scroll {
   flex: 1;
+  overflow-y: auto;
+  min-height: 0;
   padding: 12px;
 }
-
 .detail-section {
   margin-bottom: 16px;
 }
-
 .detail-section:last-child {
   margin-bottom: 0;
 }
-
 .detail-label {
   font-size: 12px;
-  color: var(--el-text-color-secondary);
+  color: var(--muted-foreground);
   margin-bottom: 6px;
 }
-
 .detail-message {
   font-size: 13px;
   font-weight: 600;
-  color: var(--el-text-color-primary);
   word-break: break-word;
 }
-
 .detail-value {
   font-size: 13px;
-  color: var(--el-text-color-primary);
   word-break: break-word;
 }
-
 .detail-hash {
   font-size: 12px;
-  font-family: var(--el-font-family-monospace, monospace);
-  color: var(--el-text-color-regular);
+  font-family: var(--font-mono, monospace);
   word-break: break-all;
 }
-
 .detail-body {
   font-size: 12px;
   line-height: 1.6;
-  color: var(--el-text-color-regular);
   white-space: pre-wrap;
   word-break: break-word;
   margin: 0;
   font-family: inherit;
 }
-
 .detail-empty {
   font-size: 12px;
-  color: var(--el-text-color-secondary);
+  color: var(--muted-foreground);
   padding: 8px 0;
 }
-
 .detail-file {
   display: flex;
   align-items: center;
@@ -343,23 +396,15 @@ function statusType(status: string): 'success' | 'danger' | 'warning' | 'info' {
   padding: 4px 0;
   font-size: 12px;
 }
-
 .file-status {
   flex-shrink: 0;
   min-width: 36px;
-  text-align: center;
+  justify-content: center;
 }
-
 .file-path {
   flex: 1;
-  color: var(--el-text-color-primary);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-}
-
-:deep(.el-dialog__body) {
-  padding-top: 10px;
-  padding-bottom: 20px;
 }
 </style>

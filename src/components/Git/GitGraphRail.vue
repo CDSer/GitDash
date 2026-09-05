@@ -185,6 +185,6 @@ function onClick(e: MouseEvent) {
 
 .git-overflow {
   font-size: 8px;
-  fill: var(--el-text-color-secondary);
+  fill: var(--muted-foreground);
 }
 </style>

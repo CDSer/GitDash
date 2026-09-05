@@ -3,25 +3,20 @@
   group 为 null 时是添加模式，否则是编辑模式
 -->
 <template>
-  <el-dialog
-    v-model="visible"
-    :title="isEditing ? '重命名分组' : '添加分组'"
-    width="420px"
-    :close-on-click-modal="false"
-    append-to-body
-  >
-    <el-form label-width="80px" @submit.prevent>
-      <el-form-item label="分组名称">
-        <el-input
+  <Dialog v-model="visible" :title="isEditing ? '重命名分组' : '添加分组'" width="420px">
+    <div class="space-y-4">
+      <div class="form-item">
+        <label class="form-label">分组名称</label>
+        <Input
           v-model="name"
           placeholder="我的分组"
           maxlength="20"
-          show-word-limit
           @keyup.enter="submit"
         />
-      </el-form-item>
+      </div>
 
-      <el-form-item label="颜色">
+      <div class="form-item">
+        <label class="form-label">颜色</label>
         <div class="color-picker">
           <button
             v-for="color in colors"
@@ -31,38 +26,34 @@
             :class="{ 'is-active': selectedColor === color }"
             :style="{ backgroundColor: color }"
             @click="selectedColor = color"
-          ></button>
+          />
         </div>
-      </el-form-item>
-    </el-form>
+      </div>
+    </div>
 
-    <el-alert v-if="error" type="error" :title="error" :closable="false" show-icon />
+    <Alert v-if="error" variant="error" :title="error" />
 
     <template #footer>
-      <el-button @click="visible = false">取消</el-button>
-      <el-button
-        type="primary"
-        :loading="isSaving"
-        :disabled="!name.trim()"
-        @click="submit"
-      >
+      <Button variant="ghost" @click="visible = false">取消</Button>
+      <Button variant="primary" :disabled="!name.trim() || isSaving" @click="submit">
         {{ isEditing ? '保存' : '添加' }}
-      </el-button>
+      </Button>
     </template>
-  </el-dialog>
+  </Dialog>
 </template>
 
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue';
-import { ElMessage } from 'element-plus';
 import type { Group } from '../../types';
 import { useAppStore } from '../../stores/appStore';
+import Dialog from '../ui/Dialog.vue';
+import Input from '../ui/Input.vue';
+import Button from '../ui/Button.vue';
+import Alert from '../ui/Alert.vue';
+import { toast } from '../../lib/toast';
 
 const visible = defineModel<boolean>({ required: true });
-
-/** 编辑目标分组；为 null 表示添加模式 */
 const props = defineProps<{ group: Group | null }>();
-
 const emit = defineEmits(['saved']);
 
 const appStore = useAppStore();
@@ -75,18 +66,17 @@ const error = ref('');
 const isEditing = computed(() => !!props.group);
 
 const colors = [
-  '#3b82f6', // blue
-  '#22c55e', // green
-  '#f59e0b', // yellow
-  '#ef4444', // red
-  '#a855f7', // purple
-  '#ec4899', // pink
-  '#06b6d4', // cyan
-  '#84cc16', // lime
+  '#3b82f6',
+  '#22c55e',
+  '#f59e0b',
+  '#ef4444',
+  '#a855f7',
+  '#ec4899',
+  '#06b6d4',
+  '#84cc16',
 ];
 
-// 每次打开弹窗时用当前模式初始化表单
-watch(visible, open => {
+watch(visible, (open) => {
   if (open) {
     name.value = props.group?.name ?? '';
     selectedColor.value = props.group?.color ?? '#3b82f6';
@@ -103,10 +93,10 @@ async function submit() {
   try {
     if (isEditing.value && props.group) {
       await appStore.renameGroup(props.group.id, name.value.trim(), selectedColor.value);
-      ElMessage.success('分组已更新');
+      toast.success('分组已更新');
     } else {
       await appStore.addGroup(name.value.trim(), selectedColor.value);
-      ElMessage.success('分组已添加');
+      toast.success('分组已添加');
     }
     emit('saved');
     visible.value = false;
@@ -119,12 +109,20 @@ async function submit() {
 </script>
 
 <style scoped>
+.form-item {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.form-label {
+  font-size: 13px;
+  font-weight: 500;
+}
 .color-picker {
   display: flex;
   flex-wrap: wrap;
   gap: 8px;
 }
-
 .color-item {
   width: 28px;
   height: 28px;
@@ -134,9 +132,8 @@ async function submit() {
   padding: 0;
   transition: transform 0.15s;
 }
-
 .color-item.is-active {
-  border-color: var(--el-color-primary);
+  border-color: var(--primary);
   transform: scale(1.15);
 }
 </style>

@@ -1,7 +1,7 @@
 // Tauri Commands 模块
 // 定义所有暴露给前端的 Rust 命令
 
-use crate::models::{AppConfig, Branch, Commit, CommitDetail, CommitFile, FileNode, GitResult, Group, OperationEvent, Project, ProjectStatus};
+use crate::models::{AppConfig, Branch, Commit, CommitDetail, CommitFile, FileNode, GitResult, Group, OperationEvent, Project, ProjectStatus, Settings};
 use crate::scanner::ProjectScanner;
 use crate::store::{AppState, StatusCache};
 use crate::watcher::WatcherManager;
@@ -13,6 +13,20 @@ use uuid::Uuid;
 pub async fn get_config(state: State<'_, AppState>) -> Result<AppConfig, String> {
     let config = state.config.read();
     Ok(config.clone())
+}
+
+/// 更新应用设置（并持久化到配置文件）
+#[tauri::command]
+pub async fn update_settings(
+    settings: Settings,
+    state: State<'_, AppState>,
+) -> Result<(), String> {
+    {
+        let mut config = state.config.write();
+        config.settings = settings.clone();
+        save_config(&config, &state.cache)?;
+    }
+    Ok(())
 }
 
 /// 添加新项目

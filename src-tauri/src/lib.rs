@@ -17,6 +17,7 @@ macro_rules! invoke_handler {
     () => {
         tauri::generate_handler![
             $crate::commands::get_config,
+            $crate::commands::update_settings,
             $crate::commands::add_project,
             $crate::commands::remove_project,
             $crate::commands::update_projects,

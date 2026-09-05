@@ -5,41 +5,25 @@
   底部：选中提交的详情（提交说明 + 改动文件列表）
 -->
 <template>
-  <div class="git-panel">
-    <div class="git-header">
-      <el-select
-        v-model="currentBranch"
-        size="small"
-        class="branch-select"
-        @change="loadCommits"
-      >
-        <el-option
-          v-for="b in branches"
-          :key="b.name"
-          :label="b.display_name"
-          :value="b.name"
-        />
-      </el-select>
-      <span class="git-count">{{ commits.length }} 次提交</span>
-      <el-button
-        text
-        size="small"
-        :icon="Close"
-        class="git-close"
-        title="关闭"
-        @click="$emit('close')"
+  <div class="git-panel flex h-full min-h-0 flex-col">
+    <div class="flex h-10 shrink-0 items-center gap-3 border-b border-border bg-card px-3">
+      <Select
+        :model-value="currentBranch"
+        :options="branchOptions"
+        class="w-52"
+        @update:model-value="onBranchChange"
       />
+      <span class="text-xs text-muted-foreground">{{ commits.length }} 次提交</span>
+      <Button variant="ghost" size="icon" class="ml-auto" title="关闭" @click="$emit('close')">
+        <X :size="16" />
+      </Button>
     </div>
 
-    <div class="git-body" v-loading="loading" @scroll="onScroll">
-      <div class="git-rail">
-        <GitGraphRail
-          :commits="commits"
-          :selected-id="selectedId"
-          @select="onSelect"
-        />
+    <div class="git-body relative flex min-h-0 flex-1 overflow-y-auto overflow-x-hidden" @scroll="onScroll">
+      <div class="git-rail shrink-0 border-r border-border">
+        <GitGraphRail :commits="commits" :selected-id="selectedId" @select="onSelect" />
       </div>
-      <div class="git-list">
+      <div class="git-list min-w-0 flex-1">
         <div
           v-for="c in commits"
           :key="c.id"
@@ -53,11 +37,15 @@
         </div>
         <div v-if="!commits.length && !loading" class="git-empty">无提交记录</div>
         <div v-if="loadingMore" class="git-foot">加载更多…</div>
-        <div v-else-if="endReached && commits.length" class="git-foot muted">已到历史开头</div>
+        <div v-else-if="endReached && commits.length" class="git-foot git-foot--muted">已到历史开头</div>
+      </div>
+
+      <div v-if="loading" class="git-loading">
+        <Spinner size="lg" />
       </div>
     </div>
 
-    <div v-if="detail" class="git-detail">
+    <div v-if="detail" class="git-detail shrink-0 max-h-[40%] overflow-auto border-t border-border bg-card p-3">
       <div class="detail-title">
         提交详情 · {{ detail.short_id }}
         <span class="detail-author">{{ detail.author }}</span>
@@ -65,8 +53,8 @@
       <pre v-if="detail.body" class="detail-body">{{ detail.body }}</pre>
       <div class="detail-files">
         <div v-for="f in detail.files" :key="f.path" class="file-item">
-          <el-tag size="small" :type="statusType(f.status)">{{ f.status }}</el-tag>
-          <span class="file-path">{{ f.path }}</span>
+          <Tag :variant="statusVariant(f.status)" class="file-status">{{ f.status }}</Tag>
+          <span class="file-path" :title="f.path">{{ f.path }}</span>
         </div>
       </div>
     </div>
@@ -74,11 +62,15 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted } from 'vue';
-import { Close } from '@element-plus/icons-vue';
+import { ref, computed, onMounted } from 'vue';
+import { X } from 'lucide-vue-next';
 import type { Branch, Commit, CommitDetail } from '../../types';
 import { getBranches, getCommits, getCommitDetail } from '../../lib/tauriApi';
 import GitGraphRail from './GitGraphRail.vue';
+import Select from '../ui/Select.vue';
+import Button from '../ui/Button.vue';
+import Tag from '../ui/Tag.vue';
+import Spinner from '../ui/Spinner.vue';
 
 const props = defineProps<{ projectId: string }>();
 defineEmits<{ (e: 'close'): void }>();
@@ -94,10 +86,19 @@ const endReached = ref(false);
 
 const PAGE_SIZE = 100;
 
+const branchOptions = computed(() =>
+  branches.value.map((b) => ({ label: b.display_name, value: b.name })),
+);
+
 async function loadBranches() {
   branches.value = await getBranches(props.projectId);
   const cur = branches.value.find((b) => b.is_current);
   currentBranch.value = cur ? cur.name : branches.value[0]?.name ?? '';
+}
+
+function onBranchChange(value: string) {
+  currentBranch.value = value;
+  void loadCommits();
 }
 
 async function loadCommits() {
@@ -144,7 +145,7 @@ async function onSelect(id: string) {
   }
 }
 
-function statusType(s: string): 'success' | 'danger' | 'warning' | 'info' {
+function statusVariant(s: string): 'success' | 'danger' | 'warning' | 'info' {
   if (s.startsWith('A')) return 'success';
   if (s.startsWith('D')) return 'danger';
   if (s.startsWith('M')) return 'warning';
@@ -177,54 +178,15 @@ onMounted(async () => {
 </script>
 
 <style scoped>
-.git-panel {
-  height: 100%;
-  display: flex;
-  flex-direction: column;
-  background-color: var(--el-bg-color);
-  min-height: 0;
-}
-
-.git-header {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  height: 40px;
-  padding: 0 12px;
-  border-bottom: 1px solid var(--el-border-color);
-  background-color: var(--el-bg-color-overlay);
-  flex-shrink: 0;
-}
-
-.branch-select {
-  width: 200px;
-}
-
-.git-count {
-  font-size: 12px;
-  color: var(--el-text-color-secondary);
-}
-
-.git-close {
-  margin-left: auto;
-}
-
 .git-body {
-  flex: 1;
-  display: flex;
-  min-height: 0;
-  overflow-y: auto;
-  overflow-x: hidden;
+  background-color: var(--background);
 }
 
 .git-rail {
-  flex-shrink: 0;
   padding: 0 2px;
-  border-right: 1px solid var(--el-border-color-lighter);
 }
 
 .git-list {
-  flex: 1;
   min-width: 0;
 }
 
@@ -236,20 +198,20 @@ onMounted(async () => {
   gap: 12px;
   padding: 0 12px;
   cursor: pointer;
-  border-bottom: 1px solid var(--el-border-color-lighter);
+  border-bottom: 1px solid var(--border);
 }
 
 .git-row:hover {
-  background-color: var(--el-fill-color-light);
+  background-color: var(--accent);
 }
 
 .git-row.active {
-  background-color: var(--el-color-primary-light-9);
+  background-color: color-mix(in oklab, var(--primary) 14%, transparent);
 }
 
 .git-row-msg {
   font-size: 13px;
-  color: var(--el-text-color-primary);
+  color: var(--foreground);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -258,7 +220,7 @@ onMounted(async () => {
 
 .git-author {
   font-size: 11px;
-  color: var(--el-text-color-secondary);
+  color: var(--muted-foreground);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -267,16 +229,16 @@ onMounted(async () => {
 
 .git-date {
   font-size: 11px;
-  color: var(--el-text-color-secondary);
+  color: var(--muted-foreground);
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
   text-align: right;
 }
 
 .git-hash {
-  font-family: monospace;
+  font-family: var(--font-mono, monospace);
   font-size: 11px;
-  color: var(--el-text-color-secondary);
+  color: var(--muted-foreground);
   white-space: nowrap;
   text-align: right;
 }
@@ -284,7 +246,7 @@ onMounted(async () => {
 .git-empty {
   padding: 24px;
   text-align: center;
-  color: var(--el-text-color-secondary);
+  color: var(--muted-foreground);
   font-size: 13px;
 }
 
@@ -292,20 +254,23 @@ onMounted(async () => {
   padding: 10px 12px;
   text-align: center;
   font-size: 12px;
-  color: var(--el-text-color-secondary);
+  color: var(--muted-foreground);
 }
-
-.git-foot.muted {
+.git-foot--muted {
   opacity: 0.7;
 }
 
+.git-loading {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background-color: color-mix(in oklab, var(--background) 70%, transparent);
+}
+
 .git-detail {
-  flex-shrink: 0;
-  max-height: 40%;
-  overflow: auto;
-  padding: 10px 12px;
-  border-top: 1px solid var(--el-border-color);
-  background-color: var(--el-bg-color-overlay);
+  background-color: var(--card);
 }
 
 .detail-title {
@@ -319,13 +284,13 @@ onMounted(async () => {
 
 .detail-author {
   font-weight: 400;
-  color: var(--el-text-color-secondary);
+  color: var(--muted-foreground);
 }
 
 .detail-body {
   white-space: pre-wrap;
   font-size: 12px;
-  color: var(--el-text-color-regular);
+  color: var(--foreground);
   margin: 0 0 8px;
 }
 
@@ -340,6 +305,12 @@ onMounted(async () => {
   align-items: center;
   gap: 8px;
   font-size: 12px;
+}
+
+.file-status {
+  flex-shrink: 0;
+  min-width: 36px;
+  justify-content: center;
 }
 
 .file-path {

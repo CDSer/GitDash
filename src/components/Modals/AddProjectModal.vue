@@ -3,13 +3,7 @@
   支持输入路径、选择文件夹、拖拽文件夹
 -->
 <template>
-  <el-dialog
-    v-model="visible"
-    title="添加项目"
-    width="460px"
-    :close-on-click-modal="false"
-    append-to-body
-  >
+  <Dialog v-model="visible" title="添加项目" width="460px">
     <div
       class="drop-zone"
       :class="{ 'is-dragover': isDragging }"
@@ -18,46 +12,46 @@
       @drop.prevent="handleDrop"
       @click="selectFolder"
     >
-      <el-icon :size="40" class="drop-icon"><UploadFilled /></el-icon>
+      <UploadCloud :size="40" class="drop-icon" />
       <p class="drop-text">{{ isDragging ? '松开以添加' : '拖拽文件夹到此处' }}</p>
       <p class="drop-hint">或点击浏览</p>
     </div>
 
-    <el-form class="path-form" label-width="0" @submit.prevent>
-      <el-form-item>
-        <el-input
-          v-model="path"
-          placeholder="/path/to/git/repo"
-          @keyup.enter="addProject"
-        />
-      </el-form-item>
-    </el-form>
+    <div class="path-form">
+      <Input
+        v-model="path"
+        placeholder="/path/to/git/repo"
+        @keyup.enter="addProject"
+      />
+    </div>
 
-    <el-alert v-if="error" type="error" :title="error" :closable="false" show-icon />
+    <Alert v-if="error" variant="error" :title="error" />
 
     <template #footer>
-      <el-button @click="visible = false">取消</el-button>
-      <el-button
-        type="primary"
-        :loading="isAdding"
-        :disabled="!path.trim()"
+      <Button variant="ghost" @click="visible = false">取消</Button>
+      <Button
+        variant="primary"
+        :disabled="!path.trim() || isAdding"
         @click="addProject"
       >
         {{ isAdding ? '添加中...' : '添加' }}
-      </el-button>
+      </Button>
     </template>
-  </el-dialog>
+  </Dialog>
 </template>
 
 <script setup lang="ts">
 import { ref } from 'vue';
-import { UploadFilled } from '@element-plus/icons-vue';
-import { ElMessage } from 'element-plus';
+import { UploadCloud } from 'lucide-vue-next';
 import { useAppStore } from '../../stores/appStore';
 import { open } from '@tauri-apps/plugin-dialog';
+import Dialog from '../ui/Dialog.vue';
+import Input from '../ui/Input.vue';
+import Button from '../ui/Button.vue';
+import Alert from '../ui/Alert.vue';
+import { toast } from '../../lib/toast';
 
 const visible = defineModel<boolean>({ required: true });
-
 const emit = defineEmits(['added']);
 
 const appStore = useAppStore();
@@ -72,14 +66,13 @@ async function selectFolder() {
     const selected = await open({
       directory: true,
       multiple: false,
-      title: '选择 Git 仓库'
+      title: '选择 Git 仓库',
     });
-
     if (selected) {
       path.value = selected as string;
       error.value = '';
     }
-  } catch (err) {
+  } catch {
     error.value = '选择文件夹失败';
   }
 }
@@ -105,7 +98,7 @@ async function addProject() {
 
   try {
     await appStore.addProject(path.value.trim());
-    ElMessage.success('项目已添加');
+    toast.success('项目已添加');
     emit('added');
     visible.value = false;
     path.value = '';
@@ -119,36 +112,31 @@ async function addProject() {
 
 <style scoped>
 .drop-zone {
-  border: 1px dashed var(--el-border-color);
+  border: 1px dashed var(--border);
   border-radius: 8px;
   padding: 24px;
   text-align: center;
   cursor: pointer;
   transition: border-color 0.2s, background-color 0.2s;
 }
-
 .drop-zone:hover,
 .drop-zone.is-dragover {
-  border-color: var(--el-color-primary);
-  background-color: var(--el-color-primary-light-9);
+  border-color: var(--primary);
+  background-color: color-mix(in oklab, var(--primary) 10%, transparent);
 }
-
 .drop-icon {
-  color: var(--el-text-color-secondary);
+  color: var(--muted-foreground);
 }
-
 .drop-text {
   margin: 12px 0 4px;
   font-size: 14px;
-  color: var(--el-text-color-regular);
+  color: var(--foreground);
 }
-
 .drop-hint {
   margin: 0;
   font-size: 12px;
-  color: var(--el-text-color-secondary);
+  color: var(--muted-foreground);
 }
-
 .path-form {
   margin-top: 16px;
 }

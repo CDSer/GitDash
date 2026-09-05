@@ -3,81 +3,103 @@
   由项目列表点击「工作区」进入：左侧文件树 + 右侧多标签代码编辑器 + 底部可折叠 Git 图
 -->
 <template>
-  <div class="workspace">
-    <el-container class="ws-container">
-      <el-header class="ws-header" height="48px">
-        <div class="ws-header-left">
-          <el-button text :icon="ArrowLeft" @click="close">返回项目列表</el-button>
-          <el-divider direction="vertical" />
-          <span class="ws-project-name">{{ project?.name }}</span>
-          <span class="ws-project-path">{{ project?.path }}</span>
-        </div>
-        <div class="ws-header-right">
-          <el-button
-            text
-            size="small"
-            :icon="Collection"
-            :type="showGitPanel ? 'primary' : 'default'"
-            @click="showGitPanel = !showGitPanel"
+  <div class="flex h-screen flex-col overflow-hidden bg-background text-foreground">
+    <header
+      class="flex h-12 shrink-0 items-center justify-between border-b border-border bg-card px-4"
+    >
+      <div class="flex min-w-0 items-center gap-2">
+        <Button variant="ghost" size="sm" @click="close">
+          <ArrowLeft :size="14" /> 返回项目列表
+        </Button>
+        <Divider direction="vertical" />
+        <span class="font-semibold">{{ project?.name }}</span>
+        <span class="truncate text-xs text-muted-foreground">{{ project?.path }}</span>
+      </div>
+      <div class="flex items-center gap-2">
+        <Button
+          variant="ghost"
+          size="sm"
+          :class="showGitPanel ? 'text-primary' : ''"
+          @click="showGitPanel = !showGitPanel"
+        >
+          <GitBranch :size="14" /> Git 图
+        </Button>
+      </div>
+    </header>
+
+    <div class="flex min-h-0 flex-1">
+      <aside class="w-[260px] shrink-0 flex flex-col overflow-hidden border-r border-border bg-card">
+        <FileTree v-if="project" :root-path="project.path" @open-file="onOpenFile" />
+      </aside>
+
+      <main class="flex min-w-0 flex-1 flex-col overflow-hidden">
+        <div v-if="tabs.length" class="flex min-h-0 flex-1 flex-col">
+          <div
+            class="flex h-9 shrink-0 items-stretch overflow-x-auto border-b border-border bg-card"
           >
-            Git 图
-          </el-button>
-        </div>
-      </el-header>
-
-      <el-container class="ws-body">
-        <el-aside width="260px" class="ws-explorer">
-          <FileTree v-if="project" :root-path="project.path" @open-file="onOpenFile" />
-        </el-aside>
-
-        <el-main class="ws-content">
-          <div v-if="tabs.length" class="ws-editor-wrap">
-            <div class="ws-tabs">
-              <div
-                v-for="tab in tabs"
-                :key="tab.path"
-                :class="['ws-tab', { active: tab.path === activePath, dirty: isDirty(tab) }]"
-                :title="tab.path"
-                @click="activePath = tab.path"
-              >
-                <span class="ws-tab-name">{{ tab.name }}</span>
-                <span v-if="isDirty(tab)" class="ws-tab-dot" />
-                <el-icon class="ws-tab-close" :size="12" @click.stop="closeTab(tab.path)">
-                  <Close />
-                </el-icon>
-              </div>
-            </div>
-            <div class="ws-editor">
-              <CodeEditor
-                v-if="activeTab"
-                :model-value="activeTab.content"
-                :language="langOf(activeTab.path)"
-                @update:model-value="(v: string) => updateContent(v)"
-                @save="saveActive"
+            <div
+              v-for="tab in tabs"
+              :key="tab.path"
+              :class="[
+                'flex cursor-pointer items-center gap-1.5 border-r border-border px-2.5 text-[13px]',
+                tab.path === activePath
+                  ? 'bg-background text-foreground'
+                  : 'text-muted-foreground hover:bg-accent',
+                isDirty(tab) ? 'font-medium' : '',
+              ]"
+              :title="tab.path"
+              @click="activePath = tab.path"
+            >
+              <span class="whitespace-nowrap">{{ tab.name }}</span>
+              <span
+                v-if="isDirty(tab)"
+                class="h-1.5 w-1.5 rounded-full bg-amber-500"
               />
-              <div v-if="activeTab?.loading" class="ws-loading">加载中…</div>
+              <X
+                class="rounded p-0.5 hover:bg-muted"
+                :size="12"
+                @click.stop="closeTab(tab.path)"
+              />
             </div>
           </div>
-          <el-empty v-else description="从左侧选择文件查看或编辑" />
-
-          <div v-if="showGitPanel && project" class="ws-git-panel">
-            <GitGraphPanel :project-id="project.id" @close="showGitPanel = false" />
+          <div class="relative min-h-0 flex-1 overflow-hidden">
+            <CodeEditor
+              v-if="activeTab"
+              :model-value="activeTab.content"
+              :language="langOf(activeTab.path)"
+              @update:model-value="(v: string) => updateContent(v)"
+              @save="saveActive"
+            />
+            <div
+              v-if="activeTab?.loading"
+              class="absolute inset-0 flex items-center justify-center text-[13px] text-muted-foreground"
+            >
+              加载中…
+            </div>
           </div>
-        </el-main>
-      </el-container>
-    </el-container>
+        </div>
+        <Empty v-else description="从左侧选择文件查看或编辑" />
+
+        <div v-if="showGitPanel && project" class="h-80 shrink-0 border-t border-border min-h-0">
+          <GitGraphPanel :project-id="project.id" @close="showGitPanel = false" />
+        </div>
+      </main>
+    </div>
   </div>
 </template>
 
 <script setup lang="ts">
 import { computed, ref } from 'vue';
-import { ArrowLeft, Collection, Close } from '@element-plus/icons-vue';
-import { ElMessage } from 'element-plus';
+import { ArrowLeft, GitBranch, X } from 'lucide-vue-next';
 import { useAppStore } from '../stores/appStore';
 import FileTree from '../components/Explorer/FileTree.vue';
 import CodeEditor from '../components/Editor/CodeEditor.vue';
 import GitGraphPanel from '../components/Git/GitGraphPanel.vue';
+import Empty from '../components/ui/Empty.vue';
+import Divider from '../components/ui/Divider.vue';
+import Button from '../components/ui/Button.vue';
 import { readFile, writeFile } from '../lib/tauriApi';
+import { toast } from '../lib/toast';
 
 const appStore = useAppStore();
 const project = computed(() => appStore.workspaceProject);
@@ -94,7 +116,7 @@ const tabs = ref<OpenTab[]>([]);
 const activePath = ref<string | null>(null);
 const showGitPanel = ref(false);
 
-const activeTab = computed(() => tabs.value.find(t => t.path === activePath.value) ?? null);
+const activeTab = computed(() => tabs.value.find((t) => t.path === activePath.value) ?? null);
 
 function basename(p: string) {
   return p.split(/[\\/]/).pop() || p;
@@ -110,7 +132,7 @@ function isDirty(tab: OpenTab) {
 }
 
 async function onOpenFile(path: string) {
-  const existing = tabs.value.find(t => t.path === path);
+  const existing = tabs.value.find((t) => t.path === path);
   if (existing) {
     activePath.value = path;
     return;
@@ -121,7 +143,6 @@ async function onOpenFile(path: string) {
   tabs.value.push(tab);
   activePath.value = path;
 
-  // 通过响应式代理（tabs.value[index]）更新，否则直接改局部 tab 不会触发界面刷新
   const proxy = tabs.value[index];
   try {
     const content = await readFile(path);
@@ -145,14 +166,14 @@ async function saveActive() {
   try {
     await writeFile(tab.path, tab.content);
     tab.original = tab.content;
-    ElMessage.success(`已保存 ${tab.name}`);
+    toast.success(`已保存 ${tab.name}`);
   } catch (error) {
-    ElMessage.error(`保存失败：${error}`);
+    toast.error(`保存失败：${error}`);
   }
 }
 
 function closeTab(path: string) {
-  const idx = tabs.value.findIndex(t => t.path === path);
+  const idx = tabs.value.findIndex((t) => t.path === path);
   if (idx === -1) return;
   tabs.value.splice(idx, 1);
   if (activePath.value === path) {
@@ -164,146 +185,3 @@ function close() {
   appStore.closeWorkspace();
 }
 </script>
-
-<style scoped>
-.workspace {
-  height: 100vh;
-  display: flex;
-  flex-direction: column;
-  background-color: var(--el-bg-color);
-  overflow: hidden;
-}
-
-.ws-container {
-  flex: 1;
-  overflow: hidden;
-}
-
-.ws-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 0 16px;
-  border-bottom: 1px solid var(--el-border-color);
-  background-color: var(--el-bg-color-overlay);
-}
-
-.ws-header-left {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  min-width: 0;
-}
-
-.ws-project-name {
-  font-weight: 600;
-  color: var(--el-text-color-primary);
-}
-
-.ws-project-path {
-  font-size: 12px;
-  color: var(--el-text-color-secondary);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.ws-body {
-  overflow: hidden;
-}
-
-.ws-explorer {
-  overflow: hidden;
-  border-right: 1px solid var(--el-border-color);
-  background-color: var(--el-bg-color-overlay);
-  display: flex;
-  flex-direction: column;
-}
-
-.ws-explorer > * {
-  flex: 1;
-  min-height: 0;
-}
-
-.ws-content {
-  padding: 0;
-  overflow: hidden;
-  display: flex;
-  flex-direction: column;
-}
-
-.ws-editor-wrap {
-  flex: 1;
-  min-height: 0;
-  display: flex;
-  flex-direction: column;
-}
-
-.ws-tabs {
-  display: flex;
-  align-items: stretch;
-  height: 36px;
-  flex-shrink: 0;
-  border-bottom: 1px solid var(--el-border-color);
-  background-color: var(--el-bg-color-overlay);
-  overflow-x: auto;
-}
-
-.ws-tab {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  padding: 0 10px;
-  height: 36px;
-  cursor: pointer;
-  border-right: 1px solid var(--el-border-color-lighter);
-  font-size: 13px;
-  color: var(--el-text-color-secondary);
-  white-space: nowrap;
-}
-
-.ws-tab.active {
-  background-color: var(--el-bg-color);
-  color: var(--el-text-color-primary);
-}
-
-.ws-tab-dot {
-  width: 6px;
-  height: 6px;
-  border-radius: 50%;
-  background-color: var(--el-color-warning);
-}
-
-.ws-tab-close {
-  border-radius: 4px;
-  padding: 1px;
-}
-
-.ws-tab-close:hover {
-  background-color: var(--el-fill-color-dark);
-}
-
-.ws-editor {
-  flex: 1;
-  min-height: 0;
-  position: relative;
-  overflow: hidden;
-}
-
-.ws-loading {
-  position: absolute;
-  inset: 0;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  color: var(--el-text-color-secondary);
-  font-size: 13px;
-}
-
-.ws-git-panel {
-  flex-shrink: 0;
-  height: 320px;
-  border-top: 1px solid var(--el-border-color);
-  min-height: 0;
-}
-</style>

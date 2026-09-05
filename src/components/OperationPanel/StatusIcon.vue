@@ -3,36 +3,21 @@
   显示任务状态（pending / running / success / error）
 -->
 <template>
-  <el-tooltip :content="tooltipText" placement="top">
-    <el-icon :size="16" :color="iconColor">
-      <Clock v-if="status === 'pending'" />
-      <Loading v-else-if="status === 'running'" />
-      <CircleCheckFilled v-else-if="status === 'success'" />
-      <CircleCloseFilled v-else />
-    </el-icon>
-  </el-tooltip>
+  <span :title="tooltipText" class="status-icon" :class="`status-icon--${status}`">
+    <LoaderCircle v-if="status === 'running'" :size="16" class="spin" />
+    <Clock v-else-if="status === 'pending'" :size="16" />
+    <CircleCheck v-else-if="status === 'success'" :size="16" />
+    <CircleX v-else :size="16" />
+  </span>
 </template>
 
 <script setup lang="ts">
 import { computed } from 'vue';
-import { Clock, Loading, CircleCheckFilled, CircleCloseFilled } from '@element-plus/icons-vue';
+import { Clock, LoaderCircle, CircleCheck, CircleX } from 'lucide-vue-next';
 
 const props = defineProps<{
   status: 'pending' | 'running' | 'success' | 'error';
 }>();
-
-const iconColor = computed(() => {
-  switch (props.status) {
-    case 'running':
-      return 'var(--el-color-primary)';
-    case 'success':
-      return 'var(--el-color-success)';
-    case 'error':
-      return 'var(--el-color-danger)';
-    default:
-      return 'var(--el-text-color-secondary)';
-  }
-});
 
 const tooltipText = computed(() => {
   switch (props.status) {
@@ -47,3 +32,31 @@ const tooltipText = computed(() => {
   }
 });
 </script>
+
+<style scoped>
+.status-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+.status-icon--running {
+  color: var(--primary);
+}
+.status-icon--success {
+  color: oklch(0.7 0.18 150);
+}
+.status-icon--error {
+  color: var(--destructive);
+}
+.status-icon--pending {
+  color: var(--muted-foreground);
+}
+.spin {
+  animation: status-spin 0.9s linear infinite;
+}
+@keyframes status-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+</style>

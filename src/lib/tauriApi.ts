@@ -12,6 +12,7 @@ import type {
   Commit,
   CommitDetail,
   FileNode,
+  Settings,
 } from '../types';
 
 /**
@@ -19,6 +20,14 @@ import type {
  */
 export async function getConfig(): Promise<AppConfig> {
   return invoke<AppConfig>('get_config');
+}
+
+/**
+ * 更新应用设置（Git 路径、自动 Fetch 间隔、并发数、主题、全局快捷键）
+ * @param settings 设置对象
+ */
+export async function updateSettings(settings: Settings): Promise<void> {
+  return invoke('update_settings', { settings });
 }
 
 /**

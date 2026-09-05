@@ -1,19 +1,24 @@
 <!--
   应用根组件
-  提供 Element Plus 全局配置（中文语言包），并挂载页面视图
+  挂载页面视图，并负责主题初始化与全局 Toast 宿主
 -->
 <template>
-  <el-config-provider :locale="zhCn">
-    <MainView v-if="!appStore.workspaceProjectId" />
-    <WorkspaceView v-else />
-  </el-config-provider>
+  <MainView v-if="!appStore.workspaceProjectId" />
+  <WorkspaceView v-else />
+  <ToastHost />
 </template>
 
 <script setup lang="ts">
-import zhCn from 'element-plus/es/locale/lang/zh-cn';
+import { onMounted } from 'vue';
 import MainView from './views/MainView.vue';
 import WorkspaceView from './views/WorkspaceView.vue';
+import ToastHost from './components/ui/ToastHost.vue';
 import { useAppStore } from './stores/appStore';
+import { setupTheme } from './composables/useTheme';
 
 const appStore = useAppStore();
+
+onMounted(() => {
+  setupTheme();
+});
 </script>
