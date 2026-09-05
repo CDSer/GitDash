@@ -1,4 +1,5 @@
 @import "tailwindcss";
+@import "tw-animate-css";
 
 /* GitDash 设计令牌（参照 terax「源码内嵌 + Tailwind」方式）
    颜色通过 CSS 变量定义 light/dark，再用 @theme inline 映射到 Tailwind 工具类，
@@ -135,4 +136,51 @@
   width: 0;
   height: 0;
   display: none;
+}
+
+/* ===== 下拉 / 右键菜单（reka-ui） ===== */
+.ui-dropdown-panel {
+  z-index: 60;
+  min-width: 180px;
+  padding: 4px;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  background-color: var(--popover);
+  color: var(--popover-foreground);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.2);
+}
+.ui-dropdown-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 7px 8px;
+  font-size: 13px;
+  line-height: 1.2;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+  outline: none;
+  user-select: none;
+}
+.ui-dropdown-item[data-highlighted] {
+  background-color: var(--accent);
+  color: var(--accent-foreground);
+}
+.ui-dropdown-item[data-disabled] {
+  opacity: 0.45;
+  pointer-events: none;
+}
+.ui-dropdown-item.is-danger {
+  color: var(--destructive);
+}
+.ui-dropdown-item.is-danger[data-highlighted] {
+  background-color: color-mix(in oklab, var(--destructive) 16%, transparent);
+  color: var(--destructive);
+}
+.ui-dropdown-item-icon {
+  flex-shrink: 0;
 }

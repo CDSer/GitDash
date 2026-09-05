@@ -38,15 +38,20 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted } from 'vue';
+import { ref, computed, onMounted, defineAsyncComponent } from 'vue';
 import { Plus, Settings } from 'lucide-vue-next';
 import { useAppStore } from '../stores/appStore';
 import GroupTree from '../components/Sidebar/GroupTree.vue';
 import ProjectTable from '../components/ProjectList/ProjectTable.vue';
 import OperationQueue from '../components/OperationPanel/OperationQueue.vue';
-import AddProjectModal from '../components/Modals/AddProjectModal.vue';
-import SettingsModal from '../components/Modals/SettingsModal.vue';
 import Button from '../components/ui/Button.vue';
+
+const AddProjectModal = defineAsyncComponent(
+  () => import('../components/Modals/AddProjectModal.vue'),
+);
+const SettingsModal = defineAsyncComponent(
+  () => import('../components/Modals/SettingsModal.vue'),
+);
 
 const appStore = useAppStore();
 

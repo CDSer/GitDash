@@ -1,25 +1,24 @@
 <template>
-  <DropdownMenuRoot>
-    <DropdownMenuTrigger as-child>
+  <ContextMenuRoot>
+    <ContextMenuTrigger as-child>
       <slot name="trigger" />
-    </DropdownMenuTrigger>
-    <DropdownMenuPortal>
-      <DropdownMenuContent
+    </ContextMenuTrigger>
+    <ContextMenuPortal>
+      <ContextMenuContent
         class="ui-dropdown-panel data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:animate-in data-[state=open]:fade-in-0 data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95"
-        :side-offset="4"
-        align="end"
+        :collision-padding="8"
       >
         <slot />
-      </DropdownMenuContent>
-    </DropdownMenuPortal>
-  </DropdownMenuRoot>
+      </ContextMenuContent>
+    </ContextMenuPortal>
+  </ContextMenuRoot>
 </template>
 
 <script setup lang="ts">
 import {
-  DropdownMenuRoot,
-  DropdownMenuTrigger,
-  DropdownMenuPortal,
-  DropdownMenuContent,
+  ContextMenuRoot,
+  ContextMenuTrigger,
+  ContextMenuPortal,
+  ContextMenuContent,
 } from 'reka-ui';
 </script>

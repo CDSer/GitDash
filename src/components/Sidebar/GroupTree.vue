@@ -22,7 +22,7 @@
         ]"
         @click="selectGroup(group.id)"
       >
-        <Dropdown v-if="isUserGroup(group.id)" trigger="contextmenu">
+        <ContextMenu v-if="isUserGroup(group.id)">
           <template #trigger>
             <span class="group-row-inner">
               <span class="group-dot" :style="{ backgroundColor: group.color }" />
@@ -30,9 +30,9 @@
               <span class="group-count">{{ getGroupCount(group.id) }}</span>
             </span>
           </template>
-          <DropdownItem :icon="Pencil" @click="startRename(group)">重命名</DropdownItem>
-          <DropdownItem danger :icon="Trash2" @click="askDelete(group)">删除</DropdownItem>
-        </Dropdown>
+          <ContextMenuItem :icon="Pencil" @click="startRename(group)">重命名</ContextMenuItem>
+          <ContextMenuItem danger :icon="Trash2" @click="askDelete(group)">删除</ContextMenuItem>
+        </ContextMenu>
 
         <span v-else class="group-row-inner">
           <span class="group-dot" :style="{ backgroundColor: group.color }" />
@@ -59,11 +59,17 @@ import { computed, ref } from 'vue';
 import { Plus, Pencil, Trash2 } from 'lucide-vue-next';
 import { useAppStore } from '../../stores/appStore';
 import type { Group } from '../../types';
-import AddGroupModal from '../Modals/AddGroupModal.vue';
+import { defineAsyncComponent } from 'vue';
 import Button from '../ui/Button.vue';
-import Dropdown from '../ui/Dropdown.vue';
-import DropdownItem from '../ui/DropdownItem.vue';
-import ConfirmDialog from '../ui/ConfirmDialog.vue';
+import ContextMenu from '../ui/ContextMenu.vue';
+import ContextMenuItem from '../ui/ContextMenuItem.vue';
+
+const AddGroupModal = defineAsyncComponent(
+  () => import('../Modals/AddGroupModal.vue'),
+);
+const ConfirmDialog = defineAsyncComponent(
+  () => import('../ui/ConfirmDialog.vue'),
+);
 import { toast } from '../../lib/toast';
 
 const appStore = useAppStore();

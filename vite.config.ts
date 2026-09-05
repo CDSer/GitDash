@@ -35,10 +35,13 @@ export default defineConfig({
   build: {
     rollupOptions: {
       output: {
-        manualChunks: (id) => {
-          if (/\b(vue|pinia)\b/.test(id)) {
-            return 'vue-vendor';
-          }
+        manualChunks(id) {
+          if (!id.includes('node_modules')) return;
+          if (id.includes('reka-ui')) return 'reka-ui';
+          if (id.includes('@tauri-apps')) return 'tauri';
+          if (id.includes('lucide-vue-next')) return 'lucide';
+          if (id.includes('pinia')) return 'pinia';
+          if (id.includes('node_modules/vue/') || id.includes('@vue/')) return 'vue';
         },
       },
     },

@@ -150,7 +150,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, ref, onMounted, watch } from 'vue';
+import { computed, ref, onMounted, watch, defineAsyncComponent } from 'vue';
 import {
   Search,
   Star,
@@ -169,7 +169,9 @@ import { useOperationStore } from '../../stores/operationStore';
 import { openRepoFolder } from '../../lib/tauriApi';
 import StatusBadge from './StatusBadge.vue';
 import StatusChanges from './StatusChanges.vue';
-import GitHistoryModal from '../Modals/GitHistoryModal.vue';
+const GitHistoryModal = defineAsyncComponent(
+  () => import('../Modals/GitHistoryModal.vue'),
+);
 import { useProjectStatus } from '../../composables/useProjectStatus';
 import { toast } from '../../lib/toast';
 import Button from '../ui/Button.vue';

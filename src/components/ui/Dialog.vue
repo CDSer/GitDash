@@ -1,27 +1,35 @@
 <template>
-  <Teleport to="body">
-    <div v-if="modelValue" class="ui-dialog-overlay" @mousedown.self="close">
-      <div class="ui-dialog-panel" :style="{ width: width }" role="dialog" aria-modal="true">
-        <div v-if="title || $slots.header" class="ui-dialog-header">
-          <slot name="header">
-            <h3 class="ui-dialog-title">{{ title }}</h3>
-          </slot>
-          <button class="ui-dialog-close" type="button" title="关闭" @click="close">
-            <X :size="16" />
-          </button>
-        </div>
-        <div class="ui-dialog-body">
-          <slot />
-        </div>
-        <div v-if="$slots.footer" class="ui-dialog-footer">
-          <slot name="footer" />
-        </div>
-      </div>
-    </div>
-  </Teleport>
+  <DialogRoot :open="modelValue" @update:open="(v: boolean) => emit('update:modelValue', v)">
+    <DialogPortal>
+      <DialogOverlay
+        class="ui-dialog-overlay data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:animate-in data-[state=open]:fade-in-0"
+      />
+      <DialogContent
+        class="ui-dialog-content data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:animate-in data-[state=open]:fade-in-0"
+        :style="width ? { maxWidth: width } : undefined"
+      >
+        <DialogTitle v-if="title" class="ui-dialog-title">{{ title }}</DialogTitle>
+        <DialogDescription class="sr-only" />
+        <DialogClose class="ui-dialog-close" aria-label="关闭">
+          <X :size="16" />
+        </DialogClose>
+        <div class="ui-dialog-body"><slot /></div>
+        <div v-if="$slots.footer" class="ui-dialog-footer"><slot name="footer" /></div>
+      </DialogContent>
+    </DialogPortal>
+  </DialogRoot>
 </template>
 
 <script setup lang="ts">
+import {
+  DialogRoot,
+  DialogPortal,
+  DialogOverlay,
+  DialogContent,
+  DialogTitle,
+  DialogDescription,
+  DialogClose,
+} from 'reka-ui';
 import { X } from 'lucide-vue-next';
 
 withDefaults(
@@ -30,14 +38,10 @@ withDefaults(
     title?: string;
     width?: string;
   }>(),
-  { width: '520px' },
+  { title: '', width: '520px' },
 );
 
 const emit = defineEmits<{ (e: 'update:modelValue', v: boolean): void }>();
-
-function close() {
-  emit('update:modelValue', false);
-}
 </script>
 
 <style scoped>
@@ -45,16 +49,18 @@ function close() {
   position: fixed;
   inset: 0;
   z-index: 1000;
-  display: flex;
-  align-items: center;
-  justify-content: center;
   background-color: rgba(0, 0, 0, 0.45);
   padding: 24px;
 }
-.ui-dialog-panel {
+.ui-dialog-content {
+  position: fixed;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  z-index: 1001;
   display: flex;
   flex-direction: column;
-  max-width: 92vw;
+  width: calc(100% - 32px);
   max-height: 86vh;
   border-radius: 12px;
   background-color: var(--popover);
@@ -62,23 +68,19 @@ function close() {
   border: 1px solid var(--border);
   box-shadow: 0 16px 48px rgba(0, 0, 0, 0.3);
   overflow: hidden;
-  animation: ui-dialog-in 160ms cubic-bezier(0.16, 1, 0.3, 1);
-}
-.ui-dialog-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-  padding: 14px 16px;
-  border-bottom: 1px solid var(--border);
-  flex-shrink: 0;
 }
 .ui-dialog-title {
   margin: 0;
+  padding: 14px 16px 12px 16px;
   font-size: 15px;
   font-weight: 600;
+  border-bottom: 1px solid var(--border);
+  flex-shrink: 0;
 }
 .ui-dialog-close {
+  position: absolute;
+  top: 12px;
+  right: 12px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -107,15 +109,5 @@ function close() {
   padding: 12px 16px;
   border-top: 1px solid var(--border);
   flex-shrink: 0;
-}
-@keyframes ui-dialog-in {
-  from {
-    opacity: 0;
-    transform: translateY(8px) scale(0.98);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0) scale(1);
-  }
 }
 </style>
