@@ -9,7 +9,7 @@ use crate::git::GitExecutor;
 use crate::scanner::ProjectScanner;
 use crate::store::{AppState, StatusCache};
 use crate::watcher::WatcherManager;
-use tauri::{Emitter, State, Window};
+use tauri::{webview::WebviewWindow, Emitter, Manager, State};
 use uuid::Uuid;
 
 /// 获取完整配置
@@ -566,7 +566,7 @@ pub async fn get_commit_detail(
 pub async fn batch_pull(
     project_ids: Vec<String>,
     state: State<'_, AppState>,
-    window: Window,
+    window: WebviewWindow,
 ) -> Result<Vec<GitResult>, String> {
     let projects: Vec<_> = {
         let config = state.config.read();
@@ -588,7 +588,7 @@ pub async fn batch_pull(
             message: Some(format!("正在拉取 {}...", project.name)),
         });
 
-        let result = state.git.exec(&project.path, &["pull", "--ff-only"]).await;
+        let result = state.git.exec(&project.path, &["pull", "--no-edit"]).await;
         results.push(result.clone());
 
         let status = if result.success {
@@ -616,7 +616,7 @@ pub async fn batch_pull(
 pub async fn batch_fetch(
     project_ids: Vec<String>,
     state: State<'_, AppState>,
-    window: Window,
+    window: WebviewWindow,
 ) -> Result<Vec<GitResult>, String> {
     let projects: Vec<_> = {
         let config = state.config.read();
@@ -666,7 +666,7 @@ pub async fn batch_fetch(
 pub async fn batch_push(
     project_ids: Vec<String>,
     state: State<'_, AppState>,
-    window: Window,
+    window: WebviewWindow,
 ) -> Result<Vec<GitResult>, String> {
     let projects: Vec<_> = {
         let config = state.config.read();
@@ -1382,4 +1382,19 @@ fn save_config(config: &AppConfig, cache: &StatusCache) -> Result<(), String> {
         .map_err(|e| format!("写入配置失败：{}", e))?;
     
     Ok(())
+}
+
+/// 打开 / 关闭 WebView 开发者工具（仅 debug 构建可用，用于前端调试）
+#[tauri::command]
+pub fn toggle_devtools(app: tauri::AppHandle) {
+    #[cfg(debug_assertions)]
+    {
+        if let Some(window) = app.get_webview_window("main") {
+            if window.is_devtools_open() {
+                window.close_devtools();
+            } else {
+                window.open_devtools();
+            }
+        }
+    }
 }

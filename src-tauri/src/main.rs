@@ -32,6 +32,11 @@ fn main() {
             // 设置系统托盘
             let quit_i = MenuItem::with_id(app, "quit", "退出", true, None::<&str>)?;
             let show_i = MenuItem::with_id(app, "show", "显示窗口", true, None::<&str>)?;
+            #[cfg(debug_assertions)]
+            let devtools_i = MenuItem::with_id(app, "devtools", "打开开发者工具", true, None::<&str>)?;
+            #[cfg(debug_assertions)]
+            let menu = Menu::with_items(app, &[&show_i, &devtools_i, &quit_i])?;
+            #[cfg(not(debug_assertions))]
             let menu = Menu::with_items(app, &[&show_i, &quit_i])?;
 
             let _tray = TrayIconBuilder::new()
@@ -47,6 +52,9 @@ fn main() {
                             let _ = window.show();
                             let _ = window.set_focus();
                         }
+                    }
+                    "devtools" => {
+                        gitdash_lib::commands::toggle_devtools(app.clone());
                     }
                     _ => {}
                 })

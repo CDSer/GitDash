@@ -55,8 +55,8 @@ impl GitExecutor {
             cmd.arg(arg);
         }
         
-        // 设置 30 秒超时
-        let timeout_duration = std::time::Duration::from_secs(30);
+        // 设置 120 秒超时（pull/push/fetch 等网络操作可能较慢）
+        let timeout_duration = std::time::Duration::from_secs(120);
         let result = tokio::time::timeout(timeout_duration, cmd.output()).await;
         
         let result = match result {
@@ -155,17 +155,25 @@ impl GitExecutor {
             let worktree_status = &line[1..2];
             let rest = &line[3..]; // 跳过 "XY "
 
-            // 改名 / 拷贝：rest 形如 "old\tnew"
+            // 改名 / 拷贝：porcelain 可能形如 "old -> new"（部分版本用 tab 分隔 "old\tnew"）
             let (path, original_path) = if index_status.starts_with('R')
                 || index_status.starts_with('C')
                 || worktree_status.starts_with('R')
                 || worktree_status.starts_with('C')
             {
-                let parts: Vec<&str> = rest.split('\t').collect();
-                if parts.len() >= 2 {
-                    (parts[1].to_string(), Some(parts[0].to_string()))
+                let (old, new): (&str, &str) = if rest.contains('\t') {
+                    let parts: Vec<&str> = rest.split('\t').collect();
+                    (parts.first().copied().unwrap_or(""), parts.get(1).copied().unwrap_or(""))
+                } else if let Some(pos) = rest.find(" -> ") {
+                    let (o, n) = rest.split_at(pos);
+                    (o.trim(), n[4..].trim()) // " -> " 长度为 4
                 } else {
+                    ("", rest)
+                };
+                if new.is_empty() {
                     (rest.to_string(), None)
+                } else {
+                    (new.to_string(), Some(old.to_string()))
                 }
             } else {
                 (rest.to_string(), None)
@@ -263,13 +271,15 @@ impl GitExecutor {
     fn create_command(&self, repo_path: &str) -> Command {
         let git_path = self.git_path.lock();
         let git_cmd = git_path.as_deref().unwrap_or("git");
-        
+
         let mut cmd = Command::new(git_cmd);
         cmd.current_dir(repo_path);
+        // 禁用路径中的非 ASCII 字符被转义为 \xxx 八进制，确保 status/diff 输出原始 UTF-8 路径
+        cmd.arg("-c").arg("core.quotepath=off");
         // 禁止交互式提示
         cmd.env("GIT_TERMINAL_PROMPT", "0");
         cmd.env("GIT_SSH_COMMAND", "ssh -o BatchMode=yes");
-        
+
         cmd
     }
 }

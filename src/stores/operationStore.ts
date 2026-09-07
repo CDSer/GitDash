@@ -82,11 +82,17 @@ export const useOperationStore = defineStore('operation', () => {
       });
 
       // 执行 Pull
-      await batchPullApi(projectIds);
+      const results = await batchPullApi(projectIds);
 
-      // 标记所有任务为成功
-      taskIds.forEach(id => {
-        updateTask(id, { status: 'success' });
+      // 以命令真实返回结果覆盖任务状态
+      results.forEach((r, i) => {
+        const tid = taskIds[i];
+        if (tid) {
+          updateTask(tid, {
+            status: r.success ? 'success' : 'error',
+            message: r.success ? undefined : r.stderr,
+          });
+        }
       });
 
       setTimeout(() => {
@@ -124,10 +130,16 @@ export const useOperationStore = defineStore('operation', () => {
     isQueueRunning.value = true;
 
     try {
-      await batchFetchApi(projectIds);
+      const results = await batchFetchApi(projectIds);
 
-      taskIds.forEach(id => {
-        updateTask(id, { status: 'success' });
+      results.forEach((r, i) => {
+        const tid = taskIds[i];
+        if (tid) {
+          updateTask(tid, {
+            status: r.success ? 'success' : 'error',
+            message: r.success ? undefined : r.stderr,
+          });
+        }
       });
 
       isQueueRunning.value = false;
@@ -174,11 +186,17 @@ export const useOperationStore = defineStore('operation', () => {
       });
 
       // 执行 Push
-      await batchPushApi(projectIds);
+      const results = await batchPushApi(projectIds);
 
-      // 标记所有任务为成功
-      taskIds.forEach(id => {
-        updateTask(id, { status: 'success' });
+      // 以命令真实返回结果覆盖任务状态
+      results.forEach((r, i) => {
+        const tid = taskIds[i];
+        if (tid) {
+          updateTask(tid, {
+            status: r.success ? 'success' : 'error',
+            message: r.success ? undefined : r.stderr,
+          });
+        }
       });
 
       setTimeout(() => {

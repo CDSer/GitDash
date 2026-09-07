@@ -45,7 +45,8 @@ macro_rules! invoke_handler {
             $crate::commands::git_commit_files,
             $crate::commands::git_commit_file_diff,
             $crate::commands::git_checkout_branch,
-            $crate::commands::git_remote_url
+            $crate::commands::git_remote_url,
+            $crate::commands::toggle_devtools
         ]
     };
 }

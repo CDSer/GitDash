@@ -280,7 +280,7 @@ async function stageFile(f: ChangedFile) {
     await gitStage(props.project.id, [f.path]);
     await refresh();
   } catch (e) {
-    toast.error('暂存失败');
+    toast.error(typeof e === 'string' ? e : '暂存失败');
   } finally {
     busy.value = false;
   }
@@ -293,7 +293,7 @@ async function unstageFile(f: ChangedFile) {
     await gitUnstage(props.project.id, [f.path]);
     await refresh();
   } catch (e) {
-    toast.error('取消暂存失败');
+    toast.error(typeof e === 'string' ? e : '取消暂存失败');
   } finally {
     busy.value = false;
   }
@@ -309,7 +309,7 @@ async function discardFile(f: ChangedFile) {
     ]);
     await refresh();
   } catch (e) {
-    toast.error('丢弃失败');
+    toast.error(typeof e === 'string' ? e : '丢弃失败');
   } finally {
     busy.value = false;
   }
@@ -325,7 +325,7 @@ async function stageAll() {
     );
     await refresh();
   } catch (e) {
-    toast.error('批量暂存失败');
+    toast.error(typeof e === 'string' ? e : '批量暂存失败');
   } finally {
     busy.value = false;
   }
@@ -341,7 +341,7 @@ async function unstageAll() {
     );
     await refresh();
   } catch (e) {
-    toast.error('批量取消暂存失败');
+    toast.error(typeof e === 'string' ? e : '批量取消暂存失败');
   } finally {
     busy.value = false;
   }
