@@ -1,65 +1,36 @@
-name: Build GitDash
+name: Build Tauri App
 
 on:
-  workflow_dispatch:
+  push:
+    branches: [main]
 
 jobs:
   build:
     strategy:
       fail-fast: false
       matrix:
-        os: [macos-latest, windows-latest]
-
-    runs-on: ${{ matrix.os }}
+        platform: [windows-latest]  # 也可以加 macos-latest, ubuntu-latest
+    runs-on: ${{ matrix.platform }}
 
     steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
+      - uses: pnpm/action-setup@v4
         with:
-          node-version: '22'
-          cache: 'pnpm'
+          version: 9
 
-      - name: Enable Corepack and activate pnpm
-        run: |
-          corepack enable
-          corepack prepare pnpm@9 --activate
-
-      - name: Verify pnpm
-        run: pnpm --version
-
-      - name: Install frontend dependencies
-        run: pnpm install --frozen-lockfile
-
-      - name: Install Rust toolchain (stable)
-        uses: actions-rs/toolchain@v1
+      - uses: actions/setup-node@v4
         with:
-          toolchain: stable
-          override: true
+          node-version: 20
+          cache: pnpm
 
-      - name: Cache Rust/Cargo
-        uses: actions/cache@v4
-        with:
-          path: |
-            ~/.cargo/registry
-            ~/.cargo/git
-            target
-          key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
-          restore-keys: |
-            ${{ runner.os }}-cargo-
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Install frontend deps
+        run: pnpm install
 
       - name: Build Tauri app
-        env:
-          # CI 上通常不做签名，若需要签名请在 Secrets 中配置
-          TAURI_PRIVATE_KEY: ""
-          TAURI_KEY_PASSWORD: ""
-        run: pnpm tauri build -- --verbose
-
-      - name: Upload artifacts
-        uses: actions/upload-artifact@v4
+        uses: tauri-apps/tauri-action@v0
         with:
-          name: gitdash-${{ matrix.os }}
-          path: src-tauri/target/release/bundle/**
-          if-no-files-found: error
+          args: ${{ matrix.platform == 'windows-latest' && '--target x86_64-pc-windows-msvc' || '' }}
