@@ -1,14 +1,14 @@
 <!--
-  工作区视图（整页，非弹窗）
-  由项目列表点击「工作区」进入：左侧文件树 + 右侧多标签代码编辑器 + 底部可折叠 Git 图
+  工作区视图（嵌套在 AppLayout 中）
+  左侧文件树 + 右侧多标签代码编辑器 + 底部可折叠 Git 图
 -->
 <template>
-  <div class="flex h-screen flex-col overflow-hidden bg-background text-foreground">
+  <div class="flex h-full flex-col overflow-hidden">
     <header
       class="flex h-12 shrink-0 items-center justify-between border-b border-border bg-card px-4"
     >
       <div class="flex min-w-0 items-center gap-2">
-        <Button variant="ghost" size="sm" @click="close">
+        <Button variant="ghost" size="sm" @click="backToProjects">
           <ArrowLeft :size="14" /> 返回项目列表
         </Button>
         <Divider direction="vertical" />
@@ -90,6 +90,7 @@
 
 <script setup lang="ts">
 import { computed, ref } from 'vue';
+import { useRouter } from 'vue-router';
 import { ArrowLeft, GitBranch, X } from 'lucide-vue-next';
 import { useAppStore } from '../stores/appStore';
 import FileTree from '../components/Explorer/FileTree.vue';
@@ -101,8 +102,14 @@ import Button from '../components/ui/Button.vue';
 import { readFile, writeFile } from '../lib/tauriApi';
 import { toast } from '../lib/toast';
 
+const props = defineProps<{
+  projectId: string;
+}>();
+
 const appStore = useAppStore();
-const project = computed(() => appStore.workspaceProject);
+const router = useRouter();
+
+const project = computed(() => appStore.projects.find((p) => p.id === props.projectId) ?? null);
 
 interface OpenTab {
   path: string;
@@ -181,7 +188,7 @@ function closeTab(path: string) {
   }
 }
 
-function close() {
-  appStore.closeWorkspace();
+function backToProjects() {
+  router.push({ name: 'projects' });
 }
 </script>

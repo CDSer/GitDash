@@ -1,7 +1,6 @@
 <!--
-  主页面视图
-  组合：侧边栏分组树、工具栏、项目列表、操作队列、模态框
-  侧边栏支持折叠/展开与拖拽调整宽度
+  应用布局组件
+  包含侧边栏分组树、顶部工具栏、中间 RouterView 主体区域
   宽度通过 CSS 变量控制，避免拖拽时触发 Vue 重渲染
 -->
 <template>
@@ -62,7 +61,7 @@
         </header>
 
         <main class="min-h-0 flex-1 overflow-hidden">
-          <ProjectTable />
+          <RouterView />
         </main>
       </div>
     </div>
@@ -79,7 +78,6 @@ import { ref, computed, onMounted, defineAsyncComponent } from 'vue';
 import { Plus, Settings, PanelLeftOpen, PanelLeftClose } from 'lucide-vue-next';
 import { useAppStore } from '../stores/appStore';
 import GroupTree from '../components/Sidebar/GroupTree.vue';
-import ProjectTable from '../components/ProjectList/ProjectTable.vue';
 import OperationQueue from '../components/OperationPanel/OperationQueue.vue';
 import Button from '../components/ui/Button.vue';
 

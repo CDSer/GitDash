@@ -182,6 +182,7 @@ import {
 import type { Project, ProjectStatus } from '../../types';
 import { useAppStore } from '../../stores/appStore';
 import { useOperationStore } from '../../stores/operationStore';
+import { useRouter } from 'vue-router';
 import { openRepoFolder } from '../../lib/tauriApi';
 import StatusBadge from './StatusBadge.vue';
 import StatusChanges from './StatusChanges.vue';
@@ -205,6 +206,7 @@ import Empty from '../ui/Empty.vue';
 
 const appStore = useAppStore();
 const operationStore = useOperationStore();
+const router = useRouter();
 const { getStatus } = useProjectStatus();
 const drag = useDragProject();
 
@@ -259,7 +261,7 @@ function groupName(groupId: string | null) {
 }
 
 function enterWorkspace(project: Project) {
-  appStore.openWorkspace(project);
+  router.push({ name: 'workspace', params: { projectId: project.id } });
 }
 
 function openHistory(project: Project) {
