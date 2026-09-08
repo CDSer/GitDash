@@ -3,26 +3,31 @@ name: Build Tauri App
 on:
   push:
     branches: [main]
+  pull_request:
 
 jobs:
   build:
     strategy:
       fail-fast: false
       matrix:
-        platform: [windows-latest]  # 也可以加 macos-latest, ubuntu-latest
+        platform: [windows-latest]
+
     runs-on: ${{ matrix.platform }}
 
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout
+        uses: actions/checkout@v4
 
-      - uses: pnpm/action-setup@v4
+      - name: Install pnpm
+        uses: pnpm/action-setup@v3
         with:
           version: 9
 
-      - uses: actions/setup-node@v4
+      - name: Setup Node
+        uses: actions/setup-node@v4
         with:
           node-version: 20
-          cache: pnpm
+          cache: 'pnpm'
 
       - name: Install Rust
         uses: dtolnay/rust-toolchain@stable
@@ -30,7 +35,9 @@ jobs:
       - name: Install frontend deps
         run: pnpm install
 
-      - name: Build Tauri app
+      - name: Build Tauri
         uses: tauri-apps/tauri-action@v0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
-          args: ${{ matrix.platform == 'windows-latest' && '--target x86_64-pc-windows-msvc' || '' }}
+          args: ''
