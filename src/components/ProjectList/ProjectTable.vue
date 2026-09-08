@@ -43,8 +43,10 @@
         <div
           v-for="row in filteredProjects"
           :key="row.id"
-          class="group grid cursor-default items-center border-b border-border px-3 py-2 text-[13px] hover:bg-accent/60"
+          :data-project-row-id="row.id"
+          class="group grid cursor-grab items-center border-b border-border px-3 py-2 text-[13px] hover:bg-accent/60 active:cursor-grabbing"
           style="grid-template-columns: 36px minmax(160px, 1.4fr) minmax(180px, 1.6fr) 120px 84px 200px 130px"
+          @pointerdown="drag.startDrag(row.id, $event)"
           @dblclick="openRepo(row)"
         >
           <div class="flex justify-center">
@@ -55,9 +57,8 @@
               @click.stop="appStore.toggleSelect(row.id)"
             />
           </div>
-          <div class="flex min-w-0 items-center gap-1.5">
+          <div class="flex min-w-0 select-none items-center gap-1.5">
             <span class="truncate font-medium">{{ row.name }}</span>
-            <Star v-if="row.is_favorite" :size="14" class="shrink-0 text-amber-500" fill="currentColor" />
           </div>
           <div class="truncate text-muted-foreground" :title="row.path">{{ row.path }}</div>
           <div class="truncate text-muted-foreground">
@@ -81,9 +82,6 @@
               </template>
               <DropdownItem :icon="Monitor" @click="enterWorkspace(row)">打开工作区</DropdownItem>
               <DropdownItem :icon="FolderOpen" @click="openRepo(row)">打开文件夹</DropdownItem>
-              <DropdownItem :icon="Star" @click="appStore.toggleFavorite(row.id)">
-                {{ row.is_favorite ? '取消收藏' : '设为收藏' }}
-              </DropdownItem>
               <DropdownItem :icon="GitCommitHorizontal" @click="openHistory(row)">Git 记录</DropdownItem>
               <DropdownItem :icon="GitBranch" @click="openSourceControl(row)">源码控制</DropdownItem>
               <div class="my-1 h-px bg-border" />
@@ -170,7 +168,6 @@
 import { computed, ref, onMounted, watch, defineAsyncComponent } from 'vue';
 import {
   Search,
-  Star,
   Folder,
   FolderOpen,
   RefreshCw,
@@ -198,6 +195,7 @@ const ConfirmDialog = defineAsyncComponent(
   () => import('../ui/ConfirmDialog.vue'),
 );
 import { useProjectStatus } from '../../composables/useProjectStatus';
+import { useDragProject } from '../../composables/useDragProject';
 import { toast } from '../../lib/toast';
 import Button from '../ui/Button.vue';
 import Input from '../ui/Input.vue';
@@ -208,6 +206,7 @@ import Empty from '../ui/Empty.vue';
 const appStore = useAppStore();
 const operationStore = useOperationStore();
 const { getStatus } = useProjectStatus();
+const drag = useDragProject();
 
 const showHistory = ref(false);
 const historyProject = ref<Project | null>(null);

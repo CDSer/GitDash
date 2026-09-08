@@ -58,7 +58,6 @@ pub async fn add_project(
         path: path.clone(),
         group_id: None,
         tags: Vec::new(),
-        is_favorite: false,
         created_at: chrono::Utc::now().timestamp(),
     };
 

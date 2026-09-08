@@ -7,7 +7,6 @@ export interface Project {
   path: string;
   group_id: string | null;
   tags: string[];
-  is_favorite: boolean;
   created_at: number;
 }
 

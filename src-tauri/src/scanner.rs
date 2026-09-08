@@ -79,7 +79,6 @@ impl ProjectScanner {
             path: path.to_string_lossy().to_string(),
             group_id: None,
             tags: Vec::new(),
-            is_favorite: false,
             created_at,
         })
     }

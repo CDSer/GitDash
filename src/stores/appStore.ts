@@ -42,20 +42,12 @@ export const useAppStore = defineStore('app', () => {
     let result = projects.value;
 
     // 按分组过滤
-    // all / favorites / untagged 是前端的系统分组，不对应项目上的 group_id，需要单独处理
+    // untagged 是前端系统分组，不对应项目上的 group_id
     if (activeGroupId.value) {
-      switch (activeGroupId.value) {
-        case 'all':
-          // 全部：不过滤
-          break;
-        case 'favorites':
-          result = result.filter(p => p.is_favorite);
-          break;
-        case 'untagged':
-          result = result.filter(p => !p.group_id);
-          break;
-        default:
-          result = result.filter(p => p.group_id === activeGroupId.value);
+      if (activeGroupId.value === 'untagged') {
+        result = result.filter(p => !p.group_id);
+      } else {
+        result = result.filter(p => p.group_id === activeGroupId.value);
       }
     }
 
@@ -84,15 +76,13 @@ export const useAppStore = defineStore('app', () => {
   const hasSelection = computed(() => selectedProjectIds.value.size > 0);
 
   /**
-   * 所有分组（包含系统分组）
+   * 所有分组（包含系统分组「未分组」）
    */
   const allGroups = computed(() => {
-    const all: Group[] = [
-      { id: 'all', name: '全部', color: '#6b7280', sort_order: -3 },
-      { id: 'favorites', name: '收藏', color: '#f59e0b', sort_order: -2 },
+    const system: Group[] = [
       { id: 'untagged', name: '未分组', color: '#9ca3af', sort_order: -1 },
     ];
-    return [...all, ...groups.value.sort((a, b) => a.sort_order - b.sort_order)];
+    return [...system, ...groups.value.sort((a, b) => a.sort_order - b.sort_order)];
   });
 
   /**
@@ -178,20 +168,6 @@ export const useAppStore = defineStore('app', () => {
    */
   function moveToGroup(projectId: string, groupId: string | null) {
     moveProjectsToGroup([projectId], groupId);
-  }
-
-  /**
-   * 切换项目收藏状态
-   * @param projectId 项目 ID
-   */
-  function toggleFavorite(projectId: string) {
-    const project = projects.value.find(p => p.id === projectId);
-    if (!project) return;
-
-    project.is_favorite = !project.is_favorite;
-    updateProjectsApi(projects.value).catch(err => {
-      console.error('保存收藏状态失败：', err);
-    });
   }
 
   /**
@@ -366,7 +342,6 @@ export const useAppStore = defineStore('app', () => {
     renameGroup,
     moveToGroup,
     moveProjectsToGroup,
-    toggleFavorite,
     updateStatus,
     saveSettings,
     toggleSelect,

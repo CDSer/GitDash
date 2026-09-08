@@ -20,7 +20,6 @@ pub struct Project {
     pub path: String,
     pub group_id: Option<String>,
     pub tags: Vec<String>,
-    pub is_favorite: bool,
     pub created_at: i64,
 }
 
