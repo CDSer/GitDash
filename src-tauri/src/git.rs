@@ -9,6 +9,9 @@ use std::time::Instant;
 use tokio::process::Command;
 use tokio::sync::Semaphore;
 
+#[cfg(windows)]
+use std::os::windows::process::CommandExt;
+
 /// Git 命令执行器
 /// 支持并发控制和超时机制
 pub struct GitExecutor {
@@ -274,6 +277,11 @@ impl GitExecutor {
 
         let mut cmd = Command::new(git_cmd);
         cmd.current_dir(repo_path);
+
+        // Windows 上避免每次执行 git 都闪现控制台窗口
+        #[cfg(windows)]
+        cmd.creation_flags(0x08000000); // CREATE_NO_WINDOW
+
         // 禁用路径中的非 ASCII 字符被转义为 \xxx 八进制，确保 status/diff 输出原始 UTF-8 路径
         cmd.arg("-c").arg("core.quotepath=off");
         // 禁止交互式提示
