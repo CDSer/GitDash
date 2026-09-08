@@ -22,10 +22,13 @@ jobs:
           node-version: '22'
           cache: 'pnpm'
 
-      - name: Install pnpm
-        uses: pnpm/action-setup@v3
-        with:
-          version: '9'
+      - name: Enable Corepack and activate pnpm
+        run: |
+          corepack enable
+          corepack prepare pnpm@9 --activate
+
+      - name: Verify pnpm
+        run: pnpm --version
 
       - name: Install frontend dependencies
         run: pnpm install --frozen-lockfile
@@ -49,7 +52,7 @@ jobs:
 
       - name: Build Tauri app
         env:
-          # CI 上通常不做签名，故留空。若需要签名请在仓库 Secrets 中配置并替换这里。
+          # CI 上通常不做签名，若需要签名请在 Secrets 中配置
           TAURI_PRIVATE_KEY: ""
           TAURI_KEY_PASSWORD: ""
         run: pnpm tauri build -- --verbose
