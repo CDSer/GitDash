@@ -40,6 +40,26 @@ pub struct Settings {
     pub max_concurrent_git: usize,
     pub theme: String,
     pub global_shortcut: String,
+    #[serde(default = "default_scan_blacklist")]
+    pub scan_blacklist: Vec<String>,
+}
+
+pub fn default_scan_blacklist() -> Vec<String> {
+    vec![
+        ".git".to_string(),
+        "node_modules".to_string(),
+        "target".to_string(),
+        "dist".to_string(),
+        "build".to_string(),
+        ".next".to_string(),
+        ".nuxt".to_string(),
+        "vendor".to_string(),
+        "__pycache__".to_string(),
+        ".venv".to_string(),
+        "venv".to_string(),
+        ".idea".to_string(),
+        ".vscode".to_string(),
+    ]
 }
 
 /// 单个文件的改动（状态详情用）
@@ -177,4 +197,34 @@ pub struct FileNode {
     pub path: String,
     pub is_dir: bool,
     pub has_children: bool,
+}
+
+/// 批量扫描选项
+#[derive(Serialize, Deserialize, Clone, Debug, Default)]
+pub struct ScanOptions {
+    #[serde(default)]
+    pub max_depth: u32,
+}
+
+/// 扫描发现的候选仓库
+#[derive(Serialize, Clone, Debug)]
+pub struct ScannedRepo {
+    pub path: String,
+    pub name: String,
+}
+
+/// 批量导入结果
+#[derive(Serialize, Clone, Debug)]
+pub struct BatchImportResult {
+    pub added: Vec<Project>,
+    pub skipped: Vec<String>,
+    pub failed: Vec<String>,
+}
+
+/// 批量导入进度事件
+#[derive(Serialize, Clone, Debug)]
+pub struct ImportProgressEvent {
+    pub scanned: u64,
+    pub found: u64,
+    pub current: String,
 }

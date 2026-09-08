@@ -17,6 +17,9 @@ import type {
   GitCommitResult,
   GitDiffContentResult,
   DiscardEntry,
+  ScanOptions,
+  ScannedRepo,
+  BatchImportResult,
 } from '../types';
 
 /**
@@ -37,9 +40,37 @@ export async function updateSettings(settings: Settings): Promise<void> {
 /**
  * 添加新项目
  * @param path Git 仓库路径
+ * @param groupId 分组 ID，为空则加入未分组
  */
-export async function addProject(path: string): Promise<Project> {
-  return invoke<Project>('add_project', { path });
+export async function addProject(
+  path: string,
+  groupId?: string | null
+): Promise<Project> {
+  return invoke<Project>('add_project', { path, groupId: groupId ?? null });
+}
+
+/**
+ * 扫描目录中的 Git 仓库候选
+ * @param basePath Workspace 根目录
+ * @param options 扫描选项
+ */
+export async function scanProjects(
+  basePath: string,
+  options?: ScanOptions
+): Promise<ScannedRepo[]> {
+  return invoke<ScannedRepo[]>('scan_projects', { basePath, options });
+}
+
+/**
+ * 批量导入 Git 项目
+ * @param paths 用户勾选的仓库路径列表
+ * @param groupId 分组 ID，为空则加入未分组
+ */
+export async function batchImportProjects(
+  paths: string[],
+  groupId?: string | null
+): Promise<BatchImportResult> {
+  return invoke<BatchImportResult>('batch_import_projects', { paths, groupId: groupId ?? null });
 }
 
 /**
@@ -48,6 +79,14 @@ export async function addProject(path: string): Promise<Project> {
  */
 export async function removeProject(projectId: string): Promise<void> {
   return invoke('remove_project', { projectId });
+}
+
+/**
+ * 批量删除项目
+ * @param projectIds 项目 ID 列表
+ */
+export async function removeProjects(projectIds: string[]): Promise<void> {
+  return invoke('remove_projects', { projectIds });
 }
 
 /**

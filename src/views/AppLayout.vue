@@ -50,9 +50,19 @@
           class="flex h-12 shrink-0 items-center justify-between border-b border-border bg-card px-4"
         >
           <div class="flex items-center gap-2">
-            <Button variant="primary" @click="showAddModal = true">
-              <Plus :size="14" /> 添加项目
-            </Button>
+            <Dropdown>
+              <template #trigger>
+                <Button variant="primary">
+                  <Plus :size="14" /> 添加项目 <ChevronDown :size="14" />
+                </Button>
+              </template>
+              <DropdownItem :icon="Plus" @click="showAddModal = true">
+                单个添加
+              </DropdownItem>
+              <DropdownItem :icon="FolderPlus" @click="showBatchImportModal = true">
+                批量导入
+              </DropdownItem>
+            </Dropdown>
             <Button variant="ghost" size="icon" title="设置" @click="showSettings = true">
               <Settings :size="16" />
             </Button>
@@ -69,20 +79,26 @@
     <OperationQueue />
 
     <AddProjectModal v-model="showAddModal" />
+    <BatchImportModal v-model="showBatchImportModal" />
     <SettingsModal v-model="showSettings" />
   </div>
 </template>
 
 <script setup lang="ts">
 import { ref, computed, onMounted, defineAsyncComponent } from 'vue';
-import { Plus, Settings, PanelLeftOpen, PanelLeftClose } from 'lucide-vue-next';
+import { Plus, Settings, ChevronDown, FolderPlus, PanelLeftOpen, PanelLeftClose } from 'lucide-vue-next';
 import { useAppStore } from '../stores/appStore';
 import GroupTree from '../components/Sidebar/GroupTree.vue';
 import OperationQueue from '../components/OperationPanel/OperationQueue.vue';
 import Button from '../components/ui/Button.vue';
+import Dropdown from '../components/ui/Dropdown.vue';
+import DropdownItem from '../components/ui/DropdownItem.vue';
 
 const AddProjectModal = defineAsyncComponent(
   () => import('../components/Modals/AddProjectModal.vue'),
+);
+const BatchImportModal = defineAsyncComponent(
+  () => import('../components/Modals/BatchImportModal.vue'),
 );
 const SettingsModal = defineAsyncComponent(
   () => import('../components/Modals/SettingsModal.vue'),
@@ -91,6 +107,7 @@ const SettingsModal = defineAsyncComponent(
 const appStore = useAppStore();
 
 const showAddModal = ref(false);
+const showBatchImportModal = ref(false);
 const showSettings = ref(false);
 
 const projects = computed(() => appStore.projects);

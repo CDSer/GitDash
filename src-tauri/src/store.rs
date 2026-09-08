@@ -2,7 +2,7 @@
 // 管理应用配置、状态缓存
 
 use crate::git::GitExecutor;
-use crate::models::{AppConfig, Settings};
+use crate::models::{default_scan_blacklist, AppConfig, Settings};
 use parking_lot::{Mutex, RwLock};
 use std::collections::HashMap;
 use std::fs;
@@ -176,6 +176,7 @@ impl AppState {
                 max_concurrent_git: 3,
                 theme: "system".to_string(),
                 global_shortcut: "CmdOrControl+Shift+G".to_string(),
+                scan_blacklist: default_scan_blacklist(),
             },
         }
     }

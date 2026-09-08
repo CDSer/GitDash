@@ -23,6 +23,7 @@ export interface Settings {
   max_concurrent_git: number;
   theme: 'system' | 'light' | 'dark';
   global_shortcut: string;
+  scan_blacklist: string[];
 }
 
 export interface AppConfig {
@@ -142,4 +143,29 @@ export interface FileNode {
   path: string;
   is_dir: boolean;
   has_children: boolean;
+}
+
+/** 批量扫描选项 */
+export interface ScanOptions {
+  max_depth?: number;
+}
+
+/** 扫描发现的候选仓库 */
+export interface ScannedRepo {
+  path: string;
+  name: string;
+}
+
+/** 批量导入结果 */
+export interface BatchImportResult {
+  added: Project[];
+  skipped: string[];
+  failed: string[];
+}
+
+/** 批量导入进度事件 */
+export interface ImportProgressEvent {
+  scanned: number;
+  found: number;
+  current: string;
 }

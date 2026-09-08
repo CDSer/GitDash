@@ -5,7 +5,7 @@
 )]
 
 use gitdash_lib::git::GitExecutor;
-use gitdash_lib::models::{AppConfig, Settings};
+use gitdash_lib::models::{default_scan_blacklist, AppConfig, Settings};
 use gitdash_lib::store::{AppState, StatusCache};
 use gitdash_lib::watcher::WatcherManager;
 use parking_lot::Mutex;
@@ -88,6 +88,7 @@ fn main() {
                     max_concurrent_git: 3,
                     theme: "system".to_string(),
                     global_shortcut: "CommandOrControl+Shift+G".to_string(),
+                    scan_blacklist: default_scan_blacklist(),
                 },
             })),
             git: Arc::new(GitExecutor::new(3)),

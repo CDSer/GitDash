@@ -25,6 +25,11 @@
       />
     </div>
 
+    <div class="group-form">
+      <label class="form-label">添加到分组</label>
+      <GroupPicker v-model="selectedGroupId" />
+    </div>
+
     <Alert v-if="error" variant="error" :title="error" />
 
     <template #footer>
@@ -49,6 +54,7 @@ import Dialog from '../ui/Dialog.vue';
 import Input from '../ui/Input.vue';
 import Button from '../ui/Button.vue';
 import Alert from '../ui/Alert.vue';
+import GroupPicker from '../ui/GroupPicker.vue';
 import { toast } from '../../lib/toast';
 
 const visible = defineModel<boolean>({ required: true });
@@ -57,6 +63,7 @@ const emit = defineEmits(['added']);
 const appStore = useAppStore();
 
 const path = ref('');
+const selectedGroupId = ref<string | null>(null);
 const isDragging = ref(false);
 const isAdding = ref(false);
 const error = ref('');
@@ -97,11 +104,12 @@ async function addProject() {
   error.value = '';
 
   try {
-    await appStore.addProject(path.value.trim());
+    await appStore.addProject(path.value.trim(), selectedGroupId.value);
     toast.success('项目已添加');
     emit('added');
     visible.value = false;
     path.value = '';
+    selectedGroupId.value = null;
   } catch (err) {
     error.value = err instanceof Error ? err.message : '添加项目失败';
   } finally {
@@ -139,5 +147,15 @@ async function addProject() {
 }
 .path-form {
   margin-top: 16px;
+}
+.group-form {
+  margin-top: 16px;
+}
+.form-label {
+  display: block;
+  margin-bottom: 6px;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--foreground);
 }
 </style>

@@ -42,7 +42,7 @@
             />
           </button>
 
-          <ContextMenu v-if="isUserGroup(group.id)">
+          <ContextMenu>
             <template #trigger>
               <span class="group-row-inner" @click="selectGroup(group.id)">
                 <span class="group-dot" :style="{ backgroundColor: group.color }" />
@@ -50,15 +50,20 @@
                 <span class="group-count">{{ getGroupCount(group.id) }}</span>
               </span>
             </template>
-            <ContextMenuItem :icon="Pencil" @click="startRename(group)">重命名</ContextMenuItem>
-            <ContextMenuItem danger :icon="Trash2" @click="askDelete(group)">删除</ContextMenuItem>
+            <template v-if="isUserGroup(group.id)">
+              <ContextMenuItem :icon="Pencil" @click="startRename(group)">重命名</ContextMenuItem>
+              <ContextMenuItem danger :icon="Trash2" @click="askDelete(group)">删除</ContextMenuItem>
+              <Divider />
+            </template>
+            <ContextMenuItem
+              danger
+              :icon="FolderX"
+              :disabled="getGroupCount(group.id) === 0"
+              @click="askUnmanage(group)"
+            >
+              取消管理所有项目
+            </ContextMenuItem>
           </ContextMenu>
-
-          <span v-else class="group-row-inner" @click="selectGroup(group.id)">
-            <span class="group-dot" :style="{ backgroundColor: group.color }" />
-            <span class="group-name">{{ group.name }}</span>
-            <span class="group-count">{{ getGroupCount(group.id) }}</span>
-          </span>
         </div>
 
         <!-- 展开后的项目列表 -->
@@ -96,12 +101,20 @@
       danger
       @confirm="doDelete"
     />
+    <ConfirmDialog
+      v-model="unmanageOpen"
+      title="取消管理项目"
+      :message="unmanageMessage"
+      confirm-text="取消管理"
+      danger
+      @confirm="doUnmanage"
+    />
   </div>
 </template>
 
 <script setup lang="ts">
 import { computed, ref, onMounted, watch } from 'vue';
-import { Plus, Pencil, Trash2, ChevronRight, ChevronDown } from 'lucide-vue-next';
+import { Plus, Pencil, Trash2, FolderX, ChevronRight, ChevronDown } from 'lucide-vue-next';
 import { useAppStore } from '../../stores/appStore';
 import { useDragProject } from '../../composables/useDragProject';
 import type { Group, Project } from '../../types';
@@ -109,6 +122,7 @@ import { defineAsyncComponent } from 'vue';
 import Button from '../ui/Button.vue';
 import ContextMenu from '../ui/ContextMenu.vue';
 import ContextMenuItem from '../ui/ContextMenuItem.vue';
+import Divider from '../ui/Divider.vue';
 
 const AddGroupModal = defineAsyncComponent(
   () => import('../Modals/AddGroupModal.vue'),
@@ -125,6 +139,8 @@ const groupModalVisible = ref(false);
 const editingGroup = ref<Group | null>(null);
 const confirmOpen = ref(false);
 const pendingDelete = ref<Group | null>(null);
+const unmanageOpen = ref(false);
+const pendingUnmanage = ref<Group | null>(null);
 const expandedGroupIds = ref<Set<string>>(new Set());
 
 const confirmMessage = computed(() =>
@@ -132,6 +148,12 @@ const confirmMessage = computed(() =>
     ? `确定要删除分组「${pendingDelete.value.name}」吗？该分组下的项目会被移动到「未分组」。`
     : '',
 );
+
+const unmanageMessage = computed(() => {
+  if (!pendingUnmanage.value) return '';
+  const count = getGroupCount(pendingUnmanage.value.id);
+  return `确定要取消管理分组「${pendingUnmanage.value.name}」中的 ${count} 个项目吗？项目文件不会被删除。`;
+});
 
 const allGroups = computed(() => appStore.allGroups);
 const activeGroupId = computed(() => appStore.activeGroupId);
@@ -236,6 +258,36 @@ async function doDelete() {
     toast.error('删除分组失败');
   } finally {
     pendingDelete.value = null;
+    confirmOpen.value = false;
+  }
+}
+
+function askUnmanage(group: Group) {
+  if (getGroupCount(group.id) === 0) return;
+  pendingUnmanage.value = group;
+  unmanageOpen.value = true;
+}
+
+async function doUnmanage() {
+  const group = pendingUnmanage.value;
+  if (!group) return;
+
+  const projectIds = projectsInGroup(group.id).map((p) => p.id);
+  if (projectIds.length === 0) {
+    pendingUnmanage.value = null;
+    unmanageOpen.value = false;
+    return;
+  }
+
+  try {
+    await appStore.removeProjects(projectIds);
+    toast.success(`已取消管理 ${projectIds.length} 个项目`);
+  } catch (error) {
+    console.error('取消管理项目失败：', error);
+    toast.error('取消管理项目失败');
+  } finally {
+    pendingUnmanage.value = null;
+    unmanageOpen.value = false;
   }
 }
 </script>

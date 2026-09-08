@@ -70,6 +70,17 @@
         <Input v-model="settings.global_shortcut" placeholder="CmdOrControl+Shift+G" class="max-w-xs" />
         <p class="form-tip">示例：CmdOrControl+Shift+G</p>
       </div>
+
+      <div class="form-item">
+        <label class="form-label">批量扫描黑名单</label>
+        <textarea
+          v-model="blacklistText"
+          rows="5"
+          class="blacklist-textarea"
+          placeholder="每行一个目录名，例如：&#10;node_modules&#10;target&#10;dist"
+        />
+        <p class="form-tip">批量导入时跳过这些目录名，每行一个</p>
+      </div>
     </div>
 
     <template #footer>
@@ -108,6 +119,16 @@ const themeLabels: Record<string, string> = {
 const gitPath = computed({
   get: () => appStore.settings.git_path || '',
   set: (value) => (appStore.settings.git_path = value || null),
+});
+
+const blacklistText = computed({
+  get: () => (appStore.settings.scan_blacklist || []).join('\n'),
+  set: (value) => {
+    appStore.settings.scan_blacklist = value
+      .split('\n')
+      .map((s) => s.trim())
+      .filter((s) => s.length > 0);
+  },
 });
 
 function clampInt(v: string, min: number, max: number, fallback: number): number {
@@ -157,5 +178,23 @@ async function saveSettings() {
 .form-tip-inline {
   font-size: 12px;
   color: var(--muted-foreground);
+}
+.blacklist-textarea {
+  width: 100%;
+  min-height: 100px;
+  padding: 8px 10px;
+  border-radius: 6px;
+  border: 1px solid var(--input);
+  background-color: var(--background);
+  color: var(--foreground);
+  font-size: 13px;
+  line-height: 1.5;
+  resize: vertical;
+  font-family: var(--font-mono);
+}
+.blacklist-textarea:focus-visible {
+  outline: none;
+  border-color: var(--ring);
+  box-shadow: 0 0 0 2px color-mix(in oklab, var(--ring) 30%, transparent);
 }
 </style>

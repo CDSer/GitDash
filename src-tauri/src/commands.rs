@@ -2,8 +2,9 @@
 // 定义所有暴露给前端的 Rust 命令
 
 use crate::models::{
-    AppConfig, Branch, Commit, CommitDetail, CommitFile, DiscardEntry, FileNode, GitCommitResult,
-    GitDiffContentResult, GitResult, Group, OperationEvent, Project, ProjectStatus, Settings,
+    AppConfig, BatchImportResult, Branch, Commit, CommitDetail, CommitFile, DiscardEntry,
+    FileNode, GitCommitResult, GitDiffContentResult, GitResult, Group, OperationEvent, Project,
+    ProjectStatus, ScanOptions, ScannedRepo, Settings,
 };
 use crate::git::GitExecutor;
 use crate::scanner::ProjectScanner;
@@ -37,6 +38,7 @@ pub async fn update_settings(
 #[tauri::command]
 pub async fn add_project(
     path: String,
+    group_id: Option<String>,
     state: State<'_, AppState>,
     watcher: State<'_, WatcherManager>,
     app_handle: tauri::AppHandle,
@@ -56,7 +58,7 @@ pub async fn add_project(
         id: Uuid::new_v4().to_string(),
         name,
         path: path.clone(),
-        group_id: None,
+        group_id,
         tags: Vec::new(),
         created_at: chrono::Utc::now().timestamp(),
     };
@@ -70,6 +72,123 @@ pub async fn add_project(
     watcher.add_project(&project, &app_handle).await?;
 
     Ok(project)
+}
+
+/// 扫描目录中的 Git 仓库候选
+/// 用于批量导入前的预览，返回所有发现的仓库（不包含已存在项目）
+#[tauri::command]
+pub async fn scan_projects(
+    base_path: String,
+    options: Option<ScanOptions>,
+    state: State<'_, AppState>,
+    app_handle: tauri::AppHandle,
+) -> Result<Vec<ScannedRepo>, String> {
+    let options = options.unwrap_or_default();
+    let base = std::path::PathBuf::from(&base_path);
+
+    if !base.exists() {
+        return Err("目录不存在".to_string());
+    }
+    if !base.is_dir() {
+        return Err("路径不是目录".to_string());
+    }
+
+    let blacklist = state.config.read().settings.scan_blacklist.clone();
+
+    let scanned_repos = tokio::task::spawn_blocking({
+        let base_path = base_path.clone();
+        let options = options.clone();
+        let blacklist = blacklist.clone();
+        let app_handle = app_handle.clone();
+        move || ProjectScanner::scan_directory(&base_path, &options, &blacklist, &app_handle)
+    })
+    .await
+    .map_err(|e| format!("扫描任务异常：{}", e))?;
+
+    // 发送最终进度事件
+    let _ = app_handle.emit(
+        "import:progress",
+        crate::models::ImportProgressEvent {
+            scanned: scanned_repos.len() as u64,
+            found: scanned_repos.len() as u64,
+            current: String::new(),
+        },
+    );
+
+    Ok(scanned_repos)
+}
+
+/// 批量导入 Git 项目
+/// 根据前端勾选的仓库路径，创建项目并注册监听
+#[tauri::command]
+pub async fn batch_import_projects(
+    paths: Vec<String>,
+    group_id: Option<String>,
+    state: State<'_, AppState>,
+    watcher: State<'_, WatcherManager>,
+    app_handle: tauri::AppHandle,
+) -> Result<BatchImportResult, String> {
+    if paths.is_empty() {
+        return Ok(BatchImportResult {
+            added: Vec::new(),
+            skipped: Vec::new(),
+            failed: Vec::new(),
+        });
+    }
+
+    let existing_paths = {
+        let config = state.config.read();
+        ProjectScanner::existing_paths(&config.projects)
+    };
+
+    let mut added = Vec::new();
+    let mut skipped = Vec::new();
+    let mut failed = Vec::new();
+    let mut new_projects = Vec::new();
+
+    for path in paths {
+        let normalized = ProjectScanner::normalize_for_dedup(&path);
+
+        if existing_paths.contains(&normalized) {
+            skipped.push(path);
+            continue;
+        }
+
+        if !ProjectScanner::is_valid_git_repo(&path) {
+            failed.push(path);
+            continue;
+        }
+
+        match ProjectScanner::create_project(std::path::Path::new(&path), group_id.clone()) {
+            Some(project) => {
+                new_projects.push(project.clone());
+                added.push(project);
+            }
+            None => {
+                failed.push(path);
+            }
+        }
+    }
+
+    // 写入配置
+    if !new_projects.is_empty() {
+        let mut config = state.config.write();
+        config.projects.extend(new_projects);
+        save_config(&config, &state.cache)?;
+    }
+
+    // 注册监听器
+    for project in &added {
+        if let Err(e) = watcher.add_project(project, &app_handle).await {
+            eprintln!("注册监听器失败 {}: {}", project.path, e);
+        }
+    }
+
+    Ok(BatchImportResult {
+        added,
+        skipped,
+        failed,
+    })
 }
 
 /// 删除项目
@@ -87,6 +206,29 @@ pub async fn remove_project(
 
     watcher.remove_project(&project_id).await;
     state.cache.invalidate(&project_id);
+
+    Ok(())
+}
+
+/// 批量删除项目
+#[tauri::command]
+pub async fn remove_projects(
+    project_ids: Vec<String>,
+    state: State<'_, AppState>,
+    watcher: State<'_, WatcherManager>,
+) -> Result<(), String> {
+    let id_set: std::collections::HashSet<String> = project_ids.iter().cloned().collect();
+
+    {
+        let mut config = state.config.write();
+        config.projects.retain(|p| !id_set.contains(&p.id));
+        save_config(&config, &state.cache)?;
+    }
+
+    for project_id in &project_ids {
+        watcher.remove_project(project_id).await;
+        state.cache.invalidate(project_id);
+    }
 
     Ok(())
 }

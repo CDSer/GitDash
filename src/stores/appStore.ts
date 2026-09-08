@@ -7,7 +7,10 @@ import type { Project, Group, Settings, ProjectStatus } from '../types';
 import {
   getConfig,
   addProject as addProjectApi,
+  scanProjects as scanProjectsApi,
+  batchImportProjects as batchImportProjectsApi,
   removeProject as removeProjectApi,
+  removeProjects as removeProjectsApi,
   updateProjects as updateProjectsApi,
   addGroup as addGroupApi,
   removeGroup as removeGroupApi,
@@ -25,6 +28,21 @@ export const useAppStore = defineStore('app', () => {
     max_concurrent_git: 3,
     theme: 'system',
     global_shortcut: 'CommandOrControl+Shift+G',
+    scan_blacklist: [
+      '.git',
+      'node_modules',
+      'target',
+      'dist',
+      'build',
+      '.next',
+      '.nuxt',
+      'vendor',
+      '__pycache__',
+      '.venv',
+      'venv',
+      '.idea',
+      '.vscode',
+    ],
   });
   const statuses = ref<Map<string, ProjectStatus>>(new Map());
   const selectedProjectIds = ref<Set<string>>(new Set());
@@ -102,14 +120,47 @@ export const useAppStore = defineStore('app', () => {
   /**
    * 添加项目
    * @param path Git 仓库路径
+   * @param groupId 分组 ID，为空则加入未分组
    */
-  async function addProject(path: string) {
+  async function addProject(path: string, groupId?: string | null) {
     try {
-      const project = await addProjectApi(path);
+      const project = await addProjectApi(path, groupId);
       projects.value.push(project);
       return project;
     } catch (error) {
       console.error('添加项目失败：', error);
+      throw error;
+    }
+  }
+
+  /**
+   * 扫描目录中的 Git 仓库候选
+   * @param basePath Workspace 根目录
+   * @param options 扫描选项
+   */
+  async function scanProjects(basePath: string, options?: { max_depth?: number }) {
+    try {
+      return await scanProjectsApi(basePath, options);
+    } catch (error) {
+      console.error('扫描目录失败：', error);
+      throw error;
+    }
+  }
+
+  /**
+   * 批量导入 Git 项目
+   * @param paths 用户勾选的仓库路径列表
+   * @param groupId 分组 ID，为空则加入未分组
+   */
+  async function batchImportProjects(paths: string[], groupId?: string | null) {
+    try {
+      const result = await batchImportProjectsApi(paths, groupId);
+      if (result.added.length > 0) {
+        projects.value.push(...result.added);
+      }
+      return result;
+    } catch (error) {
+      console.error('批量导入失败：', error);
       throw error;
     }
   }
@@ -126,6 +177,27 @@ export const useAppStore = defineStore('app', () => {
       statuses.value.delete(projectId);
     } catch (error) {
       console.error('删除项目失败：', error);
+    }
+  }
+
+  /**
+   * 批量删除项目
+   * @param projectIds 项目 ID 列表
+   */
+  async function removeProjects(projectIds: string[]) {
+    if (projectIds.length === 0) return;
+
+    try {
+      await removeProjectsApi(projectIds);
+      const idSet = new Set(projectIds);
+      projects.value = projects.value.filter(p => !idSet.has(p.id));
+      projectIds.forEach(id => {
+        selectedProjectIds.value.delete(id);
+        statuses.value.delete(id);
+      });
+    } catch (error) {
+      console.error('批量删除项目失败：', error);
+      throw error;
     }
   }
 
@@ -310,7 +382,10 @@ export const useAppStore = defineStore('app', () => {
     // Actions
     loadConfig,
     addProject,
+    scanProjects,
+    batchImportProjects,
     removeProject,
+    removeProjects,
     addGroup,
     removeGroup,
     renameGroup,
