@@ -36,6 +36,7 @@
           }"
           :title="isUserGroup(group.id) ? '拖动可排序分组' : undefined"
           @pointerdown="startGroupSort(group, $event)"
+          @click="onGroupRowClick(group)"
         >
           <button
             class="toggle-btn"
@@ -56,7 +57,7 @@
 
           <ContextMenu v-if="group.id !== 'all'">
             <template #trigger>
-              <span class="group-row-inner" @click="selectGroup(group.id)">
+              <span class="group-row-inner">
                 <span class="group-dot" :style="{ backgroundColor: group.color }" />
                 <span class="group-name">{{ group.name }}</span>
                 <span class="group-count">{{ getGroupCount(group.id) }}</span>
@@ -76,11 +77,7 @@
               取消管理所有项目
             </ContextMenuItem>
           </ContextMenu>
-          <span
-            v-else
-            class="group-row-inner"
-            @click="selectGroup(group.id)"
-          >
+          <span v-else class="group-row-inner">
             <span class="group-dot" :style="{ backgroundColor: group.color }" />
             <span class="group-name">{{ group.name }}</span>
             <span class="group-count">{{ getGroupCount(group.id) }}</span>
@@ -202,6 +199,17 @@ watch(
 
 function selectGroup(groupId: string) {
   appStore.activeGroupId = groupId;
+}
+
+let suppressRowClickUntil = 0;
+
+// 点击整行：可展开的分组展开/折叠，同时保持选中切换；空分组退化为仅选中
+function onGroupRowClick(group: Group) {
+  if (Date.now() < suppressRowClickUntil) return;
+  if (canExpand(group.id)) {
+    toggleGroup(group.id);
+  }
+  selectGroup(group.id);
 }
 
 function getGroupCount(groupId: string) {
@@ -356,6 +364,11 @@ function onGroupSortEnd() {
       ordered.splice(Math.min(to, ordered.length), 0, dragId);
       appStore.reorderGroups(ordered);
     }
+  }
+
+  // 拖拽结束后短时间内忽略松手位置触发的行点击，避免误折叠
+  if (didDrag) {
+    suppressRowClickUntil = Date.now() + 300;
   }
 
   sortDragId.value = null;
