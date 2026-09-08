@@ -150,7 +150,6 @@
       </div>
     </div>
 
-    <GitHistoryModal v-model="showHistory" :project="historyProject" />
     <SourceControlModal v-model="showSourceControl" :project="sourceControlProject" />
     <ConfirmDialog
       v-model="confirmOpen"
@@ -185,9 +184,6 @@ import { useRouter } from 'vue-router';
 import { openRepoFolder } from '../../lib/tauriApi';
 import StatusBadge from './StatusBadge.vue';
 import StatusChanges from './StatusChanges.vue';
-const GitHistoryModal = defineAsyncComponent(
-  () => import('../Modals/GitHistoryModal.vue'),
-);
 const SourceControlModal = defineAsyncComponent(
   () => import('../Modals/SourceControlModal.vue'),
 );
@@ -207,8 +203,6 @@ const operationStore = useOperationStore();
 const router = useRouter();
 const { getStatus } = useProjectStatus();
 
-const showHistory = ref(false);
-const historyProject = ref<Project | null>(null);
 const showSourceControl = ref(false);
 const sourceControlProject = ref<Project | null>(null);
 
@@ -262,8 +256,8 @@ function enterWorkspace(project: Project) {
 }
 
 function openHistory(project: Project) {
-  historyProject.value = project;
-  showHistory.value = true;
+  // Git 记录已改为独立路由页面
+  router.push({ name: 'history', params: { projectId: project.id } });
 }
 
 function openSourceControl(project: Project) {

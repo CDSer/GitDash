@@ -1,10 +1,32 @@
 <!--
-  Git 历史视图弹窗
+  Git 记录页面（由原 GitHistoryModal 弹窗改版而来）
   左侧分支列表 / 中间提交列表 / 右侧提交详情
+  点击左侧项目行或项目列表「Git 记录」进入本页
 -->
 <template>
-  <Dialog v-model="visible" title="Git 记录" width="900px">
-    <div class="history-container">
+  <div class="flex h-full flex-col overflow-hidden">
+    <header
+      class="flex h-12 shrink-0 items-center justify-between border-b border-border bg-card px-4"
+    >
+      <div class="flex min-w-0 items-center gap-2">
+        <Button variant="ghost" size="sm" @click="goBack">
+          <ArrowLeft :size="14" /> 返回
+        </Button>
+        <Divider direction="vertical" />
+        <GitCommitHorizontal :size="15" class="text-muted-foreground" />
+        <span class="font-semibold">{{ project?.name ?? 'Git 记录' }}</span>
+        <span v-if="project" class="truncate text-xs text-muted-foreground">
+          {{ project.path }}
+        </span>
+      </div>
+      <div class="flex items-center gap-2">
+        <Button variant="ghost" size="sm" title="刷新" @click="reload">
+          <RefreshCw :size="14" />
+        </Button>
+      </div>
+    </header>
+
+    <div v-if="project" class="flex min-h-0 flex-1">
       <!-- 左侧分支 -->
       <aside class="history-aside">
         <div class="aside-title">分支</div>
@@ -36,6 +58,11 @@
           </template>
           <Empty v-if="!branches.length" description="暂无分支" />
         </div>
+        <div
+          class="history-resizer history-resizer--right"
+          title="拖动调整宽度"
+          @pointerdown="startBranchResize"
+        />
       </aside>
 
       <!-- 中间提交列表 -->
@@ -44,29 +71,29 @@
           <Spinner size="lg" />
         </div>
         <template v-else>
-          <div
-            class="commit-head"
-            style="grid-template-columns: 80px minmax(0, 1fr) 110px 150px"
-          >
-            <div>ID</div>
-            <div>提交信息</div>
-            <div>作者</div>
-            <div>时间</div>
-          </div>
-          <div class="commit-list">
-            <div
-              v-for="commit in commits"
-              :key="commit.id"
-              :class="['commit-row', selectedCommit?.id === commit.id ? 'commit-row--active' : '']"
-              style="grid-template-columns: 80px minmax(0, 1fr) 110px 150px"
-              @click="handleCommitChange(commit)"
-            >
-              <div class="commit-id font-mono">{{ commit.short_id }}</div>
-              <div class="commit-msg" :title="commit.message">{{ firstLine(commit.message) }}</div>
-              <div class="commit-author truncate">{{ commit.author }}</div>
-              <div class="commit-date">{{ formatDate(commit.date) }}</div>
+          <div class="commit-scroll">
+            <div class="commit-table">
+              <div class="commit-head commit-cols">
+                <div>ID</div>
+                <div>提交信息</div>
+                <div>作者</div>
+                <div>时间</div>
+              </div>
+              <div class="commit-list">
+                <div
+                  v-for="commit in commits"
+                  :key="commit.id"
+                  :class="['commit-row commit-cols', selectedCommit?.id === commit.id ? 'commit-row--active' : '']"
+                  @click="handleCommitChange(commit)"
+                >
+                  <div class="commit-id font-mono">{{ commit.short_id }}</div>
+                  <div class="commit-msg" :title="commit.message">{{ firstLine(commit.message) }}</div>
+                  <div class="commit-author truncate">{{ commit.author }}</div>
+                  <div class="commit-date">{{ formatDate(commit.date) }}</div>
+                </div>
+                <Empty v-if="!commits.length" description="暂无提交记录" />
+              </div>
             </div>
-            <Empty v-if="!commits.length" description="暂无提交记录" />
           </div>
         </template>
       </main>
@@ -123,7 +150,15 @@
           </div>
         </div>
         <Empty v-else description="选择一条提交查看详情" />
+        <div
+          class="history-resizer history-resizer--left"
+          title="拖动调整宽度"
+          @pointerdown="startDetailResize"
+        />
       </aside>
+    </div>
+    <div v-else class="flex min-h-0 flex-1 items-center justify-center">
+      <Empty description="项目不存在或已被移除" />
     </div>
 
     <Dialog v-model="fileDiffVisible" :title="`文件改动 · ${fileDiffTitle}`" width="720px">
@@ -131,31 +166,38 @@
         <DiffViewer :patch="fileDiffPatch" :is-binary="fileDiffBinary" empty-text="该文件无文本差异" />
       </div>
     </Dialog>
-  </Dialog>
+  </div>
 </template>
 
 <script setup lang="ts">
-import { computed, ref, watch } from 'vue';
+import { computed, onMounted, ref, watch } from 'vue';
+import { useRouter } from 'vue-router';
 import { open } from '@tauri-apps/plugin-shell';
-import type { Branch, Commit, CommitDetail, CommitFile, Project } from '../../types';
+import { ArrowLeft, ExternalLink, GitCommitHorizontal, RefreshCw } from 'lucide-vue-next';
+import type { Branch, Commit, CommitDetail, CommitFile } from '../types';
 import {
   getBranches,
   getCommits,
   getCommitDetail,
   gitRemoteUrl,
   gitCommitFileDiff,
-} from '../../lib/tauriApi';
-import Dialog from '../ui/Dialog.vue';
-import Tag from '../ui/Tag.vue';
-import Button from '../ui/Button.vue';
-import Spinner from '../ui/Spinner.vue';
-import Empty from '../ui/Empty.vue';
-import DiffViewer from '../Git/DiffViewer.vue';
-import { ExternalLink } from 'lucide-vue-next';
-import { toast } from '../../lib/toast';
+} from '../lib/tauriApi';
+import { useAppStore } from '../stores/appStore';
+import Dialog from '../components/ui/Dialog.vue';
+import Tag from '../components/ui/Tag.vue';
+import Button from '../components/ui/Button.vue';
+import Spinner from '../components/ui/Spinner.vue';
+import Empty from '../components/ui/Empty.vue';
+import Divider from '../components/ui/Divider.vue';
+import DiffViewer from '../components/Git/DiffViewer.vue';
+import { toast } from '../lib/toast';
 
-const visible = defineModel<boolean>({ required: true });
-const props = defineProps<{ project: Project | null }>();
+const props = defineProps<{ projectId: string }>();
+
+const appStore = useAppStore();
+const router = useRouter();
+
+const project = computed(() => appStore.projects.find((p) => p.id === props.projectId) ?? null);
 
 const branches = ref<Branch[]>([]);
 const selectedBranch = ref('');
@@ -172,21 +214,121 @@ const fileDiffTitle = ref('');
 const localBranches = computed(() => branches.value.filter((b) => b.is_local));
 const remoteBranches = computed(() => branches.value.filter((b) => b.is_remote));
 
-watch(visible, async (open) => {
-  if (open && props.project) {
+// 观察项目实体：路由切换或 store 加载完成后（项目从无到有）都会重新加载
+watch(
+  () => project.value,
+  async (p) => {
     branches.value = [];
     commits.value = [];
+    selectedBranch.value = '';
     selectedCommit.value = null;
     detail.value = null;
     remoteUrl.value = null;
+    if (!p) return;
+    // 清空分支后 loadBranches 会重新赋值，确保触发提交列表加载
     await Promise.all([loadBranches(), loadRemoteUrl()]);
+  },
+  { immediate: true },
+);
+
+// ===== 面板宽度拖拽调整（与分组侧边栏一致的交互） =====
+const BRANCH_WIDTH_KEY = 'gitdash:history-branch-width';
+const DETAIL_WIDTH_KEY = 'gitdash:history-detail-width';
+const MIN_PANEL_WIDTH = 40;
+// 上限不再限制面板拖宽：实际受窗口宽度约束，中栏表格可横向滚动不会被挤坏
+const MAX_PANEL_WIDTH = 2000;
+const BRANCH_DEFAULT = 200;
+const DETAIL_DEFAULT = 260;
+
+function restorePanelWidth(cssVar: string, storageKey: string, defaultWidth: number) {
+  let width = defaultWidth;
+  const saved = localStorage.getItem(storageKey);
+  if (saved) {
+    const parsed = parseInt(saved, 10);
+    if (!isNaN(parsed)) {
+      width = Math.max(MIN_PANEL_WIDTH, Math.min(MAX_PANEL_WIDTH, parsed));
+    }
   }
+  document.documentElement.style.setProperty(cssVar, `${width}px`);
+}
+
+onMounted(() => {
+  restorePanelWidth('--history-branch-width', BRANCH_WIDTH_KEY, BRANCH_DEFAULT);
+  restorePanelWidth('--history-detail-width', DETAIL_WIDTH_KEY, DETAIL_DEFAULT);
 });
 
+// dir=1：向右拖变宽；dir=-1：向右拖变窄
+function beginResize(cssVar: string, storageKey: string, dir: 1 | -1, defaultWidth: number) {
+  return (e: PointerEvent) => {
+    const target = e.currentTarget as HTMLElement;
+    target.setPointerCapture(e.pointerId);
+
+    const current = parseFloat(getComputedStyle(document.documentElement).getPropertyValue(cssVar));
+    const startWidth = Number.isFinite(current) && current > 0 ? current : defaultWidth;
+    const startX = e.clientX;
+    let rafId: number | null = null;
+    let latestWidth = startWidth;
+
+    // 拖拽期间禁止文本选中，避免拖动时选中页面文字
+    document.body.classList.add('select-none');
+    document.body.style.userSelect = 'none';
+
+    function onMove(ev: PointerEvent) {
+      const delta = (ev.clientX - startX) * dir;
+      const newWidth = Math.max(MIN_PANEL_WIDTH, Math.min(MAX_PANEL_WIDTH, startWidth + delta));
+      latestWidth = newWidth;
+      if (rafId === null) {
+        rafId = requestAnimationFrame(() => {
+          rafId = null;
+          document.documentElement.style.setProperty(cssVar, `${latestWidth}px`);
+        });
+      }
+    }
+
+    function onUp(ev: PointerEvent) {
+      if (rafId !== null) {
+        cancelAnimationFrame(rafId);
+        rafId = null;
+      }
+      target.releasePointerCapture(ev.pointerId);
+      window.removeEventListener('pointermove', onMove);
+      window.removeEventListener('pointerup', onUp);
+      document.documentElement.style.setProperty(cssVar, `${latestWidth}px`);
+      document.body.classList.remove('select-none');
+      document.body.style.userSelect = '';
+      localStorage.setItem(storageKey, String(latestWidth));
+    }
+
+    window.addEventListener('pointermove', onMove);
+    window.addEventListener('pointerup', onUp);
+  };
+}
+
+const startBranchResize = beginResize('--history-branch-width', BRANCH_WIDTH_KEY, 1, BRANCH_DEFAULT);
+const startDetailResize = beginResize('--history-detail-width', DETAIL_WIDTH_KEY, -1, DETAIL_DEFAULT);
+
+function goBack() {
+  if (window.history.length > 1) {
+    router.back();
+  } else {
+    router.push({ name: 'projects' });
+  }
+}
+
+async function reload() {
+  if (!project.value) return;
+  if (selectedBranch.value) {
+    await loadCommits(selectedBranch.value);
+  } else {
+    await loadBranches();
+  }
+  await loadRemoteUrl();
+}
+
 async function loadRemoteUrl() {
-  if (!props.project) return;
+  if (!project.value) return;
   try {
-    remoteUrl.value = await gitRemoteUrl(props.project.id);
+    remoteUrl.value = await gitRemoteUrl(project.value.id);
   } catch {
     remoteUrl.value = null;
   }
@@ -199,13 +341,13 @@ function openRemoteCommit() {
 }
 
 async function openFileDiff(f: CommitFile) {
-  if (!props.project || !detail.value) return;
+  if (!project.value || !detail.value) return;
   fileDiffTitle.value = f.original_path && f.original_path !== f.path
     ? `${f.original_path} → ${f.path}`
     : f.path;
   try {
     const res = await gitCommitFileDiff(
-      props.project.id,
+      project.value.id,
       detail.value.id,
       f.path,
       f.original_path ?? undefined,
@@ -227,8 +369,9 @@ watch(selectedBranch, async (branch) => {
 });
 
 async function loadBranches() {
+  if (!project.value) return;
   try {
-    branches.value = await getBranches(props.project!.id);
+    branches.value = await getBranches(project.value.id);
     const current = branches.value.find((b) => b.is_current);
     selectedBranch.value = current?.display_name || branches.value[0]?.display_name || '';
   } catch (error) {
@@ -238,9 +381,10 @@ async function loadBranches() {
 }
 
 async function loadCommits(branch: string) {
+  if (!project.value) return;
   loadingCommits.value = true;
   try {
-    commits.value = await getCommits(props.project!.id, branch, 100);
+    commits.value = await getCommits(project.value.id, branch, 100);
   } catch (error) {
     console.error('加载提交记录失败：', error);
     toast.error('加载提交记录失败');
@@ -259,8 +403,9 @@ function handleCommitChange(commit: Commit) {
 }
 
 async function loadCommitDetail(commitId: string) {
+  if (!project.value) return;
   try {
-    detail.value = await getCommitDetail(props.project!.id, commitId);
+    detail.value = await getCommitDetail(project.value.id, commitId);
   } catch (error) {
     console.error('加载提交详情失败：', error);
     toast.error('加载提交详情失败');
@@ -296,17 +441,11 @@ function statusVariant(status: string): 'success' | 'danger' | 'warning' | 'info
 </script>
 
 <style scoped>
-.history-container {
-  display: flex;
-  height: 560px;
-  border: 1px solid var(--border);
-  border-radius: 8px;
-  overflow: hidden;
-}
 .history-aside {
+  position: relative;
   display: flex;
   flex-direction: column;
-  width: 200px;
+  width: var(--history-branch-width, 200px);
   flex-shrink: 0;
   background-color: var(--muted);
   border-right: 1px solid var(--border);
@@ -314,7 +453,27 @@ function statusVariant(status: string): 'success' | 'danger' | 'warning' | 'info
 .detail-aside {
   border-right: none;
   border-left: 1px solid var(--border);
-  width: 260px;
+  width: var(--history-detail-width, 260px);
+}
+.history-resizer {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 4px;
+  cursor: col-resize;
+  background-color: transparent;
+  transition: background-color 0.15s ease;
+  z-index: 10;
+}
+.history-resizer:hover,
+.history-resizer:active {
+  background-color: var(--primary);
+}
+.history-resizer--right {
+  right: 0;
+}
+.history-resizer--left {
+  left: 0;
 }
 .aside-title {
   padding: 10px 12px;
@@ -366,6 +525,23 @@ function statusVariant(status: string): 'success' | 'danger' | 'warning' | 'info
   display: flex;
   flex-direction: column;
 }
+.commit-scroll {
+  flex: 1;
+  min-height: 0;
+  overflow-x: auto;
+  display: flex;
+  flex-direction: column;
+}
+.commit-table {
+  flex: 1;
+  min-height: 0;
+  min-width: 640px;
+  display: flex;
+  flex-direction: column;
+}
+.commit-cols {
+  grid-template-columns: 80px minmax(240px, 1fr) 110px 150px;
+}
 .commit-head {
   display: grid;
   align-items: center;
@@ -376,6 +552,7 @@ function statusVariant(status: string): 'success' | 'danger' | 'warning' | 'info
   color: var(--muted-foreground);
   border-bottom: 1px solid var(--border);
   flex-shrink: 0;
+  width: 100%;
 }
 .commit-list {
   flex: 1;
@@ -390,6 +567,7 @@ function statusVariant(status: string): 'success' | 'danger' | 'warning' | 'info
   font-size: 13px;
   border-bottom: 1px solid var(--border);
   cursor: pointer;
+  width: 100%;
 }
 .commit-row:hover {
   background-color: var(--accent);

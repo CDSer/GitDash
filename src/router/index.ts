@@ -5,6 +5,7 @@ import { createRouter, createWebHashHistory } from 'vue-router';
 import AppLayout from '../views/AppLayout.vue';
 import ProjectListView from '../views/ProjectListView.vue';
 import WorkspaceView from '../views/WorkspaceView.vue';
+import ProjectHistoryView from '../views/ProjectHistoryView.vue';
 
 export const routes = [
   {
@@ -20,6 +21,12 @@ export const routes = [
         path: 'workspace/:projectId',
         name: 'workspace',
         component: WorkspaceView,
+        props: true,
+      },
+      {
+        path: 'history/:projectId',
+        name: 'history',
+        component: ProjectHistoryView,
         props: true,
       },
     ],

@@ -18,6 +18,7 @@ export function useDragProject() {
   let startY = 0;
   let hasMoved = false;
   let initialRect: DOMRect | null = null;
+  let lastDragEndAt = 0;
 
   function startDrag(projectId: string, event: PointerEvent) {
     // 只响应鼠标左键
@@ -119,6 +120,9 @@ export function useDragProject() {
       el.classList.remove('group-block--drop-over');
     });
 
+    // 记录拖拽结束时间，供点击入口判断（避免拖回原位后误触点击跳转）
+    if (hasMoved) lastDragEndAt = Date.now();
+
     dragProjectId = null;
     hasMoved = false;
     isDragging.value = false;
@@ -153,8 +157,14 @@ export function useDragProject() {
     }
   }
 
+  // 拖拽刚结束（350ms 内）时为 true，用于点击入口忽略拖回原位的误触发
+  function wasDraggingRecently() {
+    return Date.now() - lastDragEndAt < 350;
+  }
+
   return {
     isDragging,
     startDrag,
+    wasDraggingRecently,
   };
 }

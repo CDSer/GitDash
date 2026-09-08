@@ -96,6 +96,7 @@
             class="project-item select-none"
             :title="project.path"
             @pointerdown="drag.startDrag(project.id, $event)"
+            @click="openProjectHistory(project)"
           >
             <span class="project-dot" />
             <span class="project-name">{{ project.name }}</span>
@@ -135,6 +136,7 @@ import { computed, ref, onMounted, watch, onBeforeUnmount } from 'vue';
 import { Plus, Pencil, Trash2, FolderX, ChevronRight, ChevronDown } from 'lucide-vue-next';
 import { useAppStore } from '../../stores/appStore';
 import { useDragProject } from '../../composables/useDragProject';
+import { useRouter } from 'vue-router';
 import type { Group, Project } from '../../types';
 import { defineAsyncComponent } from 'vue';
 import Button from '../ui/Button.vue';
@@ -152,6 +154,7 @@ import { toast } from '../../lib/toast';
 
 const appStore = useAppStore();
 const drag = useDragProject();
+const router = useRouter();
 
 const groupModalVisible = ref(false);
 const editingGroup = ref<Group | null>(null);
@@ -393,6 +396,12 @@ function projectsInGroup(groupId: string): Project[] {
     return appStore.projects.filter((p) => !p.group_id);
   }
   return appStore.projects.filter((p) => p.group_id === groupId);
+}
+
+// 点击左侧项目行进入 Git 记录页（拖拽后松手瞬间忽略，避免误跳转）
+function openProjectHistory(project: Project) {
+  if (drag.wasDraggingRecently()) return;
+  router.push({ name: 'history', params: { projectId: project.id } });
 }
 
 function openAddGroup() {
