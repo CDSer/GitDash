@@ -1,8 +1,8 @@
 <!--
   分组树组件
-  显示所有分组（未分组 / 自定义分组）
+  显示所有分组（全部 / 未分组 / 自定义分组）
   支持点击切换当前分组、右键重命名 / 删除
-  支持分组折叠/展开，以及拖拽项目到分组修改分组
+  支持分组折叠/展开，以及按住分组标题拖拽排序（全部 / 未分组固定在最前）
 -->
 <template>
   <div class="flex h-full flex-col">
@@ -13,7 +13,7 @@
       </Button>
     </div>
 
-    <div class="min-h-0 flex-1 overflow-y-auto p-1.5">
+    <div ref="scrollContainer" class="min-h-0 flex-1 overflow-y-auto p-1.5">
       <div
         v-for="group in allGroups"
         :key="group.id"
@@ -24,7 +24,19 @@
         }"
         @request-expand="expandGroup(group.id)"
       >
-        <div class="group-header select-none">
+        <div
+          class="group-header select-none"
+          :data-group-block-id="isUserGroup(group.id) ? group.id : undefined"
+          :class="{
+            'group-header--sorting': sortDragId === group.id,
+            'group-header--sort-target-before':
+              sortTarget?.groupId === group.id && sortTarget?.side === 'before',
+            'group-header--sort-target-after':
+              sortTarget?.groupId === group.id && sortTarget?.side === 'after',
+          }"
+          :title="isUserGroup(group.id) ? '拖动可排序分组' : undefined"
+          @pointerdown="startGroupSort(group, $event)"
+        >
           <button
             class="toggle-btn"
             :class="{ 'toggle-btn--visible': canExpand(group.id) }"
@@ -42,7 +54,7 @@
             />
           </button>
 
-          <ContextMenu>
+          <ContextMenu v-if="group.id !== 'all'">
             <template #trigger>
               <span class="group-row-inner" @click="selectGroup(group.id)">
                 <span class="group-dot" :style="{ backgroundColor: group.color }" />
@@ -64,6 +76,15 @@
               取消管理所有项目
             </ContextMenuItem>
           </ContextMenu>
+          <span
+            v-else
+            class="group-row-inner"
+            @click="selectGroup(group.id)"
+          >
+            <span class="group-dot" :style="{ backgroundColor: group.color }" />
+            <span class="group-name">{{ group.name }}</span>
+            <span class="group-count">{{ getGroupCount(group.id) }}</span>
+          </span>
         </div>
 
         <!-- 展开后的项目列表 -->
@@ -113,7 +134,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, ref, onMounted, watch } from 'vue';
+import { computed, ref, onMounted, watch, onBeforeUnmount } from 'vue';
 import { Plus, Pencil, Trash2, FolderX, ChevronRight, ChevronDown } from 'lucide-vue-next';
 import { useAppStore } from '../../stores/appStore';
 import { useDragProject } from '../../composables/useDragProject';
@@ -142,6 +163,7 @@ const pendingDelete = ref<Group | null>(null);
 const unmanageOpen = ref(false);
 const pendingUnmanage = ref<Group | null>(null);
 const expandedGroupIds = ref<Set<string>>(new Set());
+const scrollContainer = ref<HTMLElement | null>(null);
 
 const confirmMessage = computed(() =>
   pendingDelete.value
@@ -183,11 +205,13 @@ function selectGroup(groupId: string) {
 }
 
 function getGroupCount(groupId: string) {
+  if (groupId === 'all') return appStore.projects.length;
   if (groupId === 'untagged') return appStore.projects.filter((p) => !p.group_id).length;
   return appStore.projects.filter((p) => p.group_id === groupId).length;
 }
 
 function canExpand(groupId: string) {
+  if (groupId === 'all') return appStore.projects.length > 0;
   return groupId !== 'untagged' || appStore.projects.some((p) => !p.group_id);
 }
 
@@ -197,13 +221,6 @@ function canShowProjects(groupId: string) {
 
 function isExpanded(groupId: string) {
   return expandedGroupIds.value.has(groupId);
-}
-
-function expandGroup(groupId: string) {
-  if (!canExpand(groupId)) return;
-  const next = new Set(expandedGroupIds.value);
-  next.add(groupId);
-  expandedGroupIds.value = next;
 }
 
 function toggleGroup(groupId: string) {
@@ -217,7 +234,148 @@ function toggleGroup(groupId: string) {
   expandedGroupIds.value = next;
 }
 
+function expandGroup(groupId: string) {
+  if (!canExpand(groupId)) return;
+  const next = new Set(expandedGroupIds.value);
+  next.add(groupId);
+  expandedGroupIds.value = next;
+}
+
+// ========== 分组拖拽排序 ==========
+// 按住分组标题行拖动调整顺序；系统分组（全部 / 未分组）固定在最前，不参与排序
+const SORT_DRAG_THRESHOLD = 5;
+const sortDragId = ref<string | null>(null);
+const sortTarget = ref<{ groupId: string; side: 'before' | 'after' } | null>(null);
+let sortCandidate: { id: string; x: number; y: number } | null = null;
+let sortScrollTimer: number | null = null;
+let sortLastClientY = 0;
+
+function startGroupSort(group: Group, event: PointerEvent) {
+  if (event.button !== 0 || !isUserGroup(group.id)) return;
+  if (sortCandidate) return;
+  sortCandidate = { id: group.id, x: event.clientX, y: event.clientY };
+  sortLastClientY = event.clientY;
+  window.addEventListener('pointermove', onGroupSortMove);
+  window.addEventListener('pointerup', onGroupSortEnd);
+  window.addEventListener('pointercancel', onGroupSortEnd);
+}
+
+function onGroupSortMove(event: PointerEvent) {
+  if (!sortCandidate) return;
+  sortLastClientY = event.clientY;
+  if (!sortDragId.value) {
+    const dx = event.clientX - sortCandidate.x;
+    const dy = event.clientY - sortCandidate.y;
+    if (Math.hypot(dx, dy) < SORT_DRAG_THRESHOLD) return;
+    sortDragId.value = sortCandidate.id;
+    startSortAutoScroll();
+  }
+  updateSortTarget(event.clientY);
+}
+
+function updateSortTarget(clientY: number) {
+  const dragId = sortDragId.value;
+  if (!dragId) {
+    sortTarget.value = null;
+    return;
+  }
+  const headers = Array.from(
+    document.querySelectorAll<HTMLElement>('[data-group-block-id]'),
+  )
+    .map((el) => {
+      const rect = el.getBoundingClientRect();
+      return { id: el.dataset.groupBlockId as string, mid: rect.top + rect.height / 2 };
+    })
+    .filter((h) => h.id !== dragId);
+
+  let target: { groupId: string; side: 'before' | 'after' } | null = null;
+  for (const h of headers) {
+    if (clientY < h.mid) {
+      target = { groupId: h.id, side: 'before' };
+      break;
+    }
+  }
+  if (!target && headers.length > 0) {
+    target = { groupId: headers[headers.length - 1].id, side: 'after' };
+  }
+  sortTarget.value = target;
+}
+
+// 拖到列表容器上/下边缘时自动滚动（指针停在边缘也会持续滚动）
+function startSortAutoScroll() {
+  if (sortScrollTimer !== null) return;
+  sortScrollTimer = window.setInterval(() => {
+    const el = scrollContainer.value;
+    if (!el || !sortDragId.value) return;
+    const rect = el.getBoundingClientRect();
+    const margin = 28;
+    let scrollBy = 0;
+    if (sortLastClientY < rect.top + margin) {
+      scrollBy = -12;
+    } else if (sortLastClientY > rect.bottom - margin) {
+      scrollBy = 12;
+    }
+    if (scrollBy !== 0) {
+      const before = el.scrollTop;
+      el.scrollTop += scrollBy;
+      if (el.scrollTop !== before) {
+        updateSortTarget(sortLastClientY);
+      }
+    }
+  }, 60);
+}
+
+function stopSortAutoScroll() {
+  if (sortScrollTimer !== null) {
+    window.clearInterval(sortScrollTimer);
+    sortScrollTimer = null;
+  }
+}
+
+function onGroupSortEnd() {
+  window.removeEventListener('pointermove', onGroupSortMove);
+  window.removeEventListener('pointerup', onGroupSortEnd);
+  window.removeEventListener('pointercancel', onGroupSortEnd);
+  stopSortAutoScroll();
+  if (!sortCandidate) return;
+  const dragId = sortCandidate.id;
+  sortCandidate = null;
+
+  const target = sortTarget.value;
+  const didDrag = sortDragId.value !== null;
+  if (didDrag && target && target.groupId !== dragId) {
+    // 以当前 sort_order 顺序为准，将被拖分组移到目标位置
+    const ordered = [...appStore.groups]
+      .sort((a, b) => a.sort_order - b.sort_order)
+      .map((g) => g.id);
+    const from = ordered.indexOf(dragId);
+    if (from !== -1) {
+      ordered.splice(from, 1);
+      const base = ordered.indexOf(target.groupId);
+      const to = base === -1 ? ordered.length : target.side === 'after' ? base + 1 : base;
+      ordered.splice(Math.min(to, ordered.length), 0, dragId);
+      appStore.reorderGroups(ordered);
+    }
+  }
+
+  sortDragId.value = null;
+  sortTarget.value = null;
+}
+
+onBeforeUnmount(() => {
+  if (sortCandidate) {
+    sortCandidate = null;
+    sortDragId.value = null;
+    sortTarget.value = null;
+    stopSortAutoScroll();
+    window.removeEventListener('pointermove', onGroupSortMove);
+    window.removeEventListener('pointerup', onGroupSortEnd);
+    window.removeEventListener('pointercancel', onGroupSortEnd);
+  }
+});
+
 function projectsInGroup(groupId: string): Project[] {
+  if (groupId === 'all') return appStore.projects;
   if (groupId === 'untagged') {
     return appStore.projects.filter((p) => !p.group_id);
   }
@@ -239,7 +397,7 @@ function handleGroupSaved() {
 }
 
 function isUserGroup(groupId: string) {
-  return groupId !== 'untagged';
+  return groupId !== 'untagged' && groupId !== 'all';
 }
 
 function askDelete(group: Group) {
@@ -320,6 +478,19 @@ async function doUnmanage() {
 .group-header:hover {
   background-color: var(--accent);
   color: var(--accent-foreground);
+}
+/* 拖拽排序中的分组标题 */
+.group-header--sorting {
+  opacity: 0.55;
+  background-color: var(--accent);
+  color: var(--accent-foreground);
+}
+/* 排序插入位置指示线 */
+.group-header--sort-target-before {
+  box-shadow: inset 0 2px 0 0 var(--primary);
+}
+.group-header--sort-target-after {
+  box-shadow: inset 0 -2px 0 0 var(--primary);
 }
 .toggle-btn {
   display: flex;

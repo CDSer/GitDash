@@ -1,5 +1,6 @@
 // 项目拖拽组合式函数
 // 使用 pointer 事件模拟拖拽，绕过 Tauri Webview 中 HTML5 DnD 不可靠的问题
+// 当前入口：左侧分组树中展开的项目行（拖到目标分组标题上完成移动分组）
 
 import { ref } from 'vue';
 import { useAppStore } from '../stores/appStore';
@@ -57,7 +58,7 @@ export function useDragProject() {
   function createGhost() {
     if (!dragProjectId) return;
 
-    // 查找被拖拽的元素：优先在 GroupTree 中查找，再到 ProjectTable 中查找
+    // 查找被拖拽的元素：优先在 GroupTree 中查找
     const sourceEl =
       document.querySelector(`[data-project-id="${dragProjectId}"]`) ||
       document.querySelector(`[data-project-row-id="${dragProjectId}"]`);
@@ -87,7 +88,7 @@ export function useDragProject() {
 
     const targetEl = document.elementFromPoint(x, y);
     const groupEl = targetEl?.closest('[data-group-id]') as HTMLElement | null;
-    if (groupEl) {
+    if (groupEl && groupEl.dataset.groupId !== 'all') {
       groupEl.classList.add('group-block--drop-over');
     }
   }
@@ -125,7 +126,7 @@ export function useDragProject() {
   }
 
   function canDropInto(groupId: string) {
-    // 未分组和自定义分组都接受放置
+    // 「全部」与系统收藏不接收放置；未分组和自定义分组都接受
     return groupId !== 'all' && groupId !== 'favorites';
   }
 

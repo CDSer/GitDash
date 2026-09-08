@@ -46,7 +46,7 @@ export const useAppStore = defineStore('app', () => {
   });
   const statuses = ref<Map<string, ProjectStatus>>(new Map());
   const selectedProjectIds = ref<Set<string>>(new Set());
-  const activeGroupId = ref<string | null>(null);
+  const activeGroupId = ref<string | null>('all');
   const searchQuery = ref('');
 
   // ========== Getters ==========
@@ -58,8 +58,8 @@ export const useAppStore = defineStore('app', () => {
     let result = projects.value;
 
     // 按分组过滤
-    // untagged 是前端系统分组，不对应项目上的 group_id
-    if (activeGroupId.value) {
+    // 'all' / null 表示全部；untagged 是前端系统分组，不对应项目上的 group_id
+    if (activeGroupId.value && activeGroupId.value !== 'all') {
       if (activeGroupId.value === 'untagged') {
         result = result.filter(p => !p.group_id);
       } else {
@@ -92,13 +92,14 @@ export const useAppStore = defineStore('app', () => {
   const hasSelection = computed(() => selectedProjectIds.value.size > 0);
 
   /**
-   * 所有分组（包含系统分组「未分组」）
+   * 所有分组（含系统分组「全部 / 未分组」，固定在最前）
    */
   const allGroups = computed(() => {
     const system: Group[] = [
+      { id: 'all', name: '全部', color: '#3b82f6', sort_order: -2 },
       { id: 'untagged', name: '未分组', color: '#9ca3af', sort_order: -1 },
     ];
-    return [...system, ...groups.value.sort((a, b) => a.sort_order - b.sort_order)];
+    return [...system, ...[...groups.value].sort((a, b) => a.sort_order - b.sort_order)];
   });
 
   // ========== Actions ==========
@@ -250,6 +251,28 @@ export const useAppStore = defineStore('app', () => {
   }
 
   /**
+   * 重排分组顺序（将 sort_order 重新按顺序编号并触发持久化）
+   * @param orderedIds 排序后的分组 ID 列表（应包含所有用户分组）
+   */
+  function reorderGroups(orderedIds: string[]) {
+    const byId = new Map(groups.value.map((g) => [g.id, g] as const));
+    const ordered: Group[] = [];
+    for (const id of orderedIds) {
+      const group = byId.get(id);
+      if (group) {
+        ordered.push(group);
+        byId.delete(id);
+      }
+    }
+    // 兜底：未包含在内的分组追加到末尾
+    ordered.push(...byId.values());
+    ordered.forEach((g, index) => {
+      g.sort_order = index;
+    });
+    groups.value = ordered;
+  }
+
+  /**
    * 删除分组（该分组下的项目会变为未分组）
    * @param groupId 分组 ID
    */
@@ -263,7 +286,7 @@ export const useAppStore = defineStore('app', () => {
         }
       });
       if (activeGroupId.value === groupId) {
-        activeGroupId.value = null;
+        activeGroupId.value = 'all';
       }
     } catch (error) {
       console.error('删除分组失败：', error);
@@ -389,6 +412,7 @@ export const useAppStore = defineStore('app', () => {
     addGroup,
     removeGroup,
     renameGroup,
+    reorderGroups,
     moveToGroup,
     moveProjectsToGroup,
     updateStatus,

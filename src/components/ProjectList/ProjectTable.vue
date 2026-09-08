@@ -44,9 +44,8 @@
           v-for="row in filteredProjects"
           :key="row.id"
           :data-project-row-id="row.id"
-          class="group grid cursor-grab items-center border-b border-border px-3 py-2 text-[13px] hover:bg-accent/60 active:cursor-grabbing"
+          class="group grid items-center border-b border-border px-3 py-2 text-[13px] hover:bg-accent/60"
           style="grid-template-columns: 36px minmax(160px, 1.4fr) minmax(180px, 1.6fr) 120px 84px 200px 130px"
-          @pointerdown="drag.startDrag(row.id, $event)"
           @dblclick="openRepo(row)"
         >
           <div class="flex justify-center">
@@ -196,7 +195,6 @@ const ConfirmDialog = defineAsyncComponent(
   () => import('../ui/ConfirmDialog.vue'),
 );
 import { useProjectStatus } from '../../composables/useProjectStatus';
-import { useDragProject } from '../../composables/useDragProject';
 import { toast } from '../../lib/toast';
 import Button from '../ui/Button.vue';
 import Input from '../ui/Input.vue';
@@ -208,7 +206,6 @@ const appStore = useAppStore();
 const operationStore = useOperationStore();
 const router = useRouter();
 const { getStatus } = useProjectStatus();
-const drag = useDragProject();
 
 const showHistory = ref(false);
 const historyProject = ref<Project | null>(null);
