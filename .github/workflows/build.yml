@@ -7,29 +7,11 @@ on:
 
 jobs:
   build:
-    strategy:
-      fail-fast: false
-      matrix:
-        platform: [windows-latest, macos-latest, ubuntu-latest]
-        include:
-          - platform: windows-latest
-            os: windows
-          - platform: macos-latest
-            os: macos
-          - platform: ubuntu-latest
-            os: linux
-
-    runs-on: ${{ matrix.platform }}
+    runs-on: windows-latest
 
     steps:
       - name: Checkout
         uses: actions/checkout@v4
-
-      - name: Install dependencies (Ubuntu)
-        if: matrix.platform == 'ubuntu-latest'
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y libgtk-3-dev libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf
 
       - name: Install pnpm
         uses: pnpm/action-setup@v3
@@ -44,8 +26,6 @@ jobs:
 
       - name: Install Rust stable
         uses: dtolnay/rust-toolchain@stable
-        with:
-          targets: x86_64-pc-windows-msvc,x86_64-unknown-linux-gnu,x86_64-apple-darwin,aarch64-apple-darwin
 
       - name: Cache Rust dependencies
         uses: Swatinem/rust-cache@v2
@@ -62,6 +42,6 @@ jobs:
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: gitdash-${{ matrix.os }}
+          name: gitdash-windows
           path: src-tauri/target/release/bundle/
           if-no-files-found: error
