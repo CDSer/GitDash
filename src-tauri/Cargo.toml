@@ -34,6 +34,6 @@ custom-protocol = ["tauri/custom-protocol"]
 lto = true
 strip = true
 panic = "abort"
-codegen-units = 1
+codegen-units = 16
 opt-level = 3
 
