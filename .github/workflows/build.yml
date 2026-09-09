@@ -25,7 +25,6 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      # Linux 特定依赖
       - name: Install dependencies (Ubuntu)
         if: matrix.platform == 'ubuntu-latest'
         run: |
@@ -40,7 +39,7 @@ jobs:
       - name: Setup Node
         uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 24
           cache: 'pnpm'
 
       - name: Install Rust stable
