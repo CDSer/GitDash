@@ -8,6 +8,7 @@
     "build": "vue-tsc && vite build",
     "preview": "vite preview",
     "tauri": "tauri",
+    "icons": "tauri icon ./public/icon.png",
     "tb": "tauri build",
     "tb:x64": "tauri build --target x86_64-pc-windows-msvc",
     "tb:arm": "tauri build --target aarch64-pc-windows-msvc"
