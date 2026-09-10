@@ -83,10 +83,15 @@
         :project-id="project.id"
       />
       <HistoryPanel
-        v-else
+        v-else-if="mode === 'history'"
         :key="`hi-${project.id}-${historyRefreshKey}`"
         :project-id="project.id"
         embedded
+      />
+      <TerminalPanel
+        v-else
+        :key="`te-${project.id}`"
+        :project-id="project.id"
       />
     </div>
   </div>
@@ -97,7 +102,7 @@
 
 <script setup lang="ts">
 import { computed, defineAsyncComponent, ref } from 'vue';
-import { GitBranch, RefreshCw, Download, Upload, FolderTree, GitCommitHorizontal, GitMerge } from 'lucide-vue-next';
+import { GitBranch, RefreshCw, Download, Upload, FolderTree, GitCommitHorizontal, GitMerge, SquareTerminal } from 'lucide-vue-next';
 import type { ProjectTabMode } from '../stores/tabStore';
 import { useAppStore } from '../stores/appStore';
 import { useTabStore } from '../stores/tabStore';
@@ -110,6 +115,9 @@ const WorkspacePanel = defineAsyncComponent(() => import('./WorkspaceView.vue'))
 const HistoryPanel = defineAsyncComponent(() => import('./ProjectHistoryView.vue'));
 const SourceControlPanel = defineAsyncComponent(
   () => import('../components/Modals/SourceControlPanel.vue'),
+);
+const TerminalPanel = defineAsyncComponent(
+  () => import('../components/Terminal/TerminalView.vue'),
 );
 
 const props = defineProps<{ projectId: string }>();
@@ -135,6 +143,7 @@ const modes = [
   { value: 'changes' as const, label: '变更', icon: GitMerge },
   { value: 'history' as const, label: '历史', icon: GitCommitHorizontal },
   { value: 'workspace' as const, label: '工作区', icon: FolderTree },
+  { value: 'terminal' as const, label: '终端', icon: SquareTerminal },
 ];
 
 const changeBadge = computed(() => {

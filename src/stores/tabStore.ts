@@ -3,8 +3,9 @@
 
 import { defineStore } from 'pinia';
 import { computed, ref, watch } from 'vue';
+import { terminalClose } from '../lib/tauriApi';
 
-export type ProjectTabMode = 'workspace' | 'changes' | 'history';
+export type ProjectTabMode = 'workspace' | 'changes' | 'history' | 'terminal';
 
 /** 项目列表系统标签的固定 id */
 export const PROJECTS_TAB_ID = '__projects__';
@@ -35,7 +36,10 @@ function loadTabs(): ProjectTab[] {
         if (!t || typeof t.projectId !== 'string') return false;
         if (isProjectsTabId(t.projectId)) return true;
         return (
-          t.mode === 'workspace' || t.mode === 'changes' || t.mode === 'history'
+          t.mode === 'workspace' ||
+          t.mode === 'changes' ||
+          t.mode === 'history' ||
+          t.mode === 'terminal'
         );
       })
       .map((t) => {
@@ -111,6 +115,9 @@ export const useTabStore = defineStore('tabs', () => {
     const idx = tabs.value.findIndex((t) => t.projectId === projectId);
     if (idx === -1) return;
     tabs.value.splice(idx, 1);
+    if (!isProjectsTabId(projectId)) {
+      void terminalClose(projectId).catch(() => {});
+    }
     if (activeProjectId.value === projectId) {
       const next = tabs.value[Math.min(idx, tabs.value.length - 1)];
       activeProjectId.value = next?.projectId ?? null;
@@ -119,12 +126,22 @@ export const useTabStore = defineStore('tabs', () => {
   }
 
   function closeOtherTabs(projectId: string) {
+    for (const t of tabs.value) {
+      if (t.projectId !== projectId && !isProjectsTabId(t.projectId)) {
+        void terminalClose(t.projectId).catch(() => {});
+      }
+    }
     tabs.value = tabs.value.filter((t) => t.projectId === projectId);
     activeProjectId.value = projectId;
     persist();
   }
 
   function closeAllTabs() {
+    for (const t of tabs.value) {
+      if (!isProjectsTabId(t.projectId)) {
+        void terminalClose(t.projectId).catch(() => {});
+      }
+    }
     tabs.value = [];
     activeProjectId.value = null;
     persist();
@@ -155,6 +172,9 @@ export const useTabStore = defineStore('tabs', () => {
   /** 项目被移除时清理标签（不影响系统标签） */
   function removeProjectTabs(projectIds: string[]) {
     const idSet = new Set(projectIds.filter((id) => !isProjectsTabId(id)));
+    for (const id of idSet) {
+      void terminalClose(id).catch(() => {});
+    }
     tabs.value = tabs.value.filter((t) => !idSet.has(t.projectId));
     if (activeProjectId.value && idSet.has(activeProjectId.value)) {
       activeProjectId.value = tabs.value[0]?.projectId ?? null;

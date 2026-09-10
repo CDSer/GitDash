@@ -413,3 +413,43 @@ export async function readFile(path: string): Promise<string> {
 export async function writeFile(path: string, content: string): Promise<void> {
   return invoke('write_file', { path, content });
 }
+
+/**
+ * 打开（或复用）项目终端会话
+ * @param projectId 项目 ID
+ * @param cols 列数
+ * @param rows 行数
+ * @returns 可回放的历史输出（base64）
+ */
+export async function terminalOpen(
+  projectId: string,
+  cols: number,
+  rows: number
+): Promise<string> {
+  return invoke<string>('terminal_open', { projectId, cols, rows });
+}
+
+/**
+ * 向终端写入用户输入
+ */
+export async function terminalWrite(projectId: string, data: string): Promise<void> {
+  return invoke('terminal_write', { projectId, data });
+}
+
+/**
+ * 调整终端尺寸
+ */
+export async function terminalResize(
+  projectId: string,
+  cols: number,
+  rows: number
+): Promise<void> {
+  return invoke('terminal_resize', { projectId, cols, rows });
+}
+
+/**
+ * 关闭终端会话（杀掉 shell 进程）
+ */
+export async function terminalClose(projectId: string): Promise<void> {
+  return invoke('terminal_close', { projectId });
+}

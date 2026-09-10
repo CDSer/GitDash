@@ -6,6 +6,7 @@ pub mod git;
 pub mod models;
 pub mod scanner;
 pub mod store;
+pub mod terminal;
 pub mod watcher;
 
 // 重新导出常用类型（避免歧义）
@@ -56,6 +57,10 @@ macro_rules! invoke_handler {
             $crate::commands::git_commit_file_diff,
             $crate::commands::git_checkout_branch,
             $crate::commands::git_remote_url,
+            $crate::terminal::terminal_open,
+            $crate::terminal::terminal_write,
+            $crate::terminal::terminal_resize,
+            $crate::terminal::terminal_close,
             $crate::commands::toggle_devtools
         ]
     };

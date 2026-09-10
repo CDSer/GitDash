@@ -8,6 +8,7 @@ use gitdash_lib::commands::apply_runtime_settings;
 use gitdash_lib::git::GitExecutor;
 use gitdash_lib::models::{default_scan_blacklist, AppConfig, Settings};
 use gitdash_lib::store::{AppState, StatusCache};
+use gitdash_lib::terminal::TerminalManager;
 use gitdash_lib::watcher::WatcherManager;
 use parking_lot::Mutex;
 use std::sync::Arc;
@@ -146,6 +147,7 @@ fn main() {
             operation_queue: Mutex::new(Vec::new()),
         })
         .manage(WatcherManager::new())
+        .manage(TerminalManager::new())
         .run(tauri::generate_context!())
         .expect("运行 Tauri 应用时出错");
 }
