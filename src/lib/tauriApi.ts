@@ -12,7 +12,11 @@ import type {
   Commit,
   CommitDetail,
   CommitFile,
+  ConflictFileContent,
+  ConflictSide,
   FileNode,
+  InProgressOp,
+  MergeResult,
   Settings,
   GitCommitResult,
   GitDiffContentResult,
@@ -232,6 +236,73 @@ export async function gitDiscard(projectId: string, entries: DiscardEntry[]): Pr
  */
 export async function gitCommit(projectId: string, message: string): Promise<GitCommitResult> {
   return invoke<GitCommitResult>('git_commit', { projectId, message });
+}
+
+/**
+ * 查询进行中的 merge / rebase / cherry-pick / revert
+ */
+export async function gitInProgress(projectId: string): Promise<InProgressOp | null> {
+  return invoke<InProgressOp | null>('git_in_progress', { projectId });
+}
+
+/**
+ * 发起合并
+ * @param branch 目标分支名
+ */
+export async function gitMerge(projectId: string, branch: string): Promise<MergeResult> {
+  return invoke<MergeResult>('git_merge', { projectId, branch });
+}
+
+/**
+ * 中止进行中的 merge / rebase / cherry-pick / revert
+ */
+export async function gitAbortOperation(projectId: string): Promise<void> {
+  return invoke('git_abort_operation', { projectId });
+}
+
+/**
+ * 继续进行中的合并/变基（需已解决全部冲突）
+ * @param message 可选提交信息（仅 merge 使用）
+ */
+export async function gitMergeContinue(
+  projectId: string,
+  message?: string
+): Promise<GitCommitResult> {
+  return invoke<GitCommitResult>('git_merge_continue', {
+    projectId,
+    message: message ?? null,
+  });
+}
+
+/**
+ * 采纳一侧解决冲突（ours / theirs）并自动 add
+ */
+export async function gitResolveConflict(
+  projectId: string,
+  paths: string[],
+  side: ConflictSide
+): Promise<void> {
+  return invoke('git_resolve_conflict', { projectId, paths, side });
+}
+
+/**
+ * 手动编辑后标记冲突已解决（git add）
+ */
+export async function gitMarkConflictResolved(
+  projectId: string,
+  paths: string[]
+): Promise<void> {
+  return invoke('git_mark_conflict_resolved', { projectId, paths });
+}
+
+/**
+ * 读取冲突文件三路内容（base / ours / theirs）
+ */
+export async function gitConflictFileContent(
+  projectId: string,
+  path: string
+): Promise<ConflictFileContent> {
+  return invoke<ConflictFileContent>('git_conflict_file_content', { projectId, path });
 }
 
 /**

@@ -1,7 +1,10 @@
 <template>
   <span v-if="!status" class="text-muted-foreground">-</span>
-  <Tag v-else-if="status.is_clean" variant="success">无变更</Tag>
+  <Tag v-else-if="status.is_clean && !status.in_progress" variant="success">无变更</Tag>
   <div v-else class="flex items-center justify-center gap-1">
+    <Tag v-if="status.conflict_count > 0" variant="danger" :title="`${status.conflict_count} 个冲突`">
+      冲突 {{ status.conflict_count }}
+    </Tag>
     <Tag v-if="status.staged > 0" variant="primary" :title="`${status.staged} 个已暂存`">
       暂存 {{ status.staged }}
     </Tag>

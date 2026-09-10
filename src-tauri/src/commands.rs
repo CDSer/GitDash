@@ -2,9 +2,10 @@
 // 定义所有暴露给前端的 Rust 命令
 
 use crate::models::{
-    AppConfig, BatchImportResult, Branch, Commit, CommitDetail, CommitFile, DiscardEntry,
-    FileNode, GitCommitResult, GitDiffContentResult, Group, OperationEvent, Project,
-    ProjectGitResult, ProjectStatus, ScanOptions, ScannedRepo, Settings,
+    AppConfig, BatchImportResult, Branch, Commit, CommitDetail, CommitFile, ConflictFileContent,
+    ConflictSide, DiscardEntry, FileNode, GitCommitResult, GitDiffContentResult, Group,
+    InProgressOp, MergeResult, OperationEvent, Project, ProjectGitResult, ProjectStatus,
+    ScanOptions, ScannedRepo, Settings,
 };
 use crate::git::GitExecutor;
 use crate::scanner::ProjectScanner;
@@ -1203,6 +1204,7 @@ pub async fn git_discard(
 }
 
 /// 提交（返回新提交 sha + 摘要）
+/// 存在未解决冲突时拒绝；进行中的 merge 在全部 resolved 后可用 message 或默认信息完成合并提交
 #[tauri::command]
 pub async fn git_commit(
     project_id: String,
@@ -1210,12 +1212,37 @@ pub async fn git_commit(
     state: State<'_, AppState>,
 ) -> Result<GitCommitResult, String> {
     let project = resolve_project(&state, &project_id)?;
-    let trimmed = message.trim();
-    if trimmed.is_empty() {
-        return Err("提交信息不能为空".to_string());
+
+    // 检查未合并路径
+    let unmerged = state
+        .git
+        .exec(&project.path, &["ls-files", "-u"])
+        .await;
+    if unmerged.success && !unmerged.stdout.trim().is_empty() {
+        return Err("存在未解决的合并冲突，请先解决后再提交".to_string());
     }
-    let args = ["commit", "-m", trimmed];
-    let result = state.git.exec(&project.path, &args).await;
+
+    let in_progress = crate::git::GitExecutor::detect_in_progress_op(&project.path);
+    let trimmed = message.trim();
+
+    // merge 进行中且未提供信息时，用 git 自带的 MERGE_MSG 完成提交
+    let is_merge_finish = matches!(in_progress.as_ref().map(|p| p.kind.as_str()), Some("merge"));
+    if trimmed.is_empty() {
+        if !is_merge_finish {
+            return Err("提交信息不能为空".to_string());
+        }
+    }
+
+    let result = if is_merge_finish && trimmed.is_empty() {
+        state
+            .git
+            .exec(&project.path, &["commit", "--no-edit"])
+            .await
+    } else {
+        let args = ["commit", "-m", trimmed];
+        state.git.exec(&project.path, &args).await
+    };
+
     if !result.success {
         return Err(format!("提交失败：{}", result.stderr));
     }
@@ -1235,6 +1262,279 @@ pub async fn git_commit(
     Ok(GitCommitResult {
         commit_sha,
         summary,
+    })
+}
+
+// ============ 冲突 / 合并解决 ============
+
+/// 查询进行中的 merge / rebase / cherry-pick
+#[tauri::command]
+pub async fn git_in_progress(
+    project_id: String,
+    state: State<'_, AppState>,
+) -> Result<Option<InProgressOp>, String> {
+    let project = resolve_project(&state, &project_id)?;
+    Ok(crate::git::GitExecutor::detect_in_progress_op(
+        &project.path,
+    ))
+}
+
+/// 发起合并（目标分支名）
+#[tauri::command]
+pub async fn git_merge(
+    project_id: String,
+    branch: String,
+    state: State<'_, AppState>,
+) -> Result<MergeResult, String> {
+    let project = resolve_project(&state, &project_id)?;
+    if branch.is_empty() || branch.starts_with('-') {
+        return Err("非法的分支名".to_string());
+    }
+
+    let in_progress = crate::git::GitExecutor::detect_in_progress_op(&project.path);
+    if in_progress.is_some() {
+        return Err("已有进行中的合并/变基操作，请先完成或中止".to_string());
+    }
+
+    // 工作区有未暂存改动时拒绝 merge，避免 git 交互/污染
+    let status = state.git.status(&project.path).await;
+    if status.modified > 0 || status.untracked > 0 || status.conflict_count > 0 {
+        return Err("工作区有未提交的改动，请先提交或暂存后再合并".to_string());
+    }
+
+    let result = state
+        .git
+        .exec(&project.path, &["merge", "--no-edit", &branch])
+        .await;
+
+    let has_conflicts = {
+        let ls = state.git.exec(&project.path, &["ls-files", "-u"]).await;
+        ls.success && !ls.stdout.trim().is_empty()
+    };
+
+    state.cache.invalidate(&project_id);
+
+    if !result.success && !has_conflicts {
+        return Err(format!("合并失败：{}", result.stderr));
+    }
+
+    Ok(MergeResult {
+        success: result.success || has_conflicts,
+        has_conflicts,
+        message: if has_conflicts {
+            "合并存在冲突，请在源码控制中解决".to_string()
+        } else {
+            result.stdout.trim().to_string()
+        },
+    })
+}
+
+/// 中止进行中的 merge / rebase / cherry-pick / revert
+#[tauri::command]
+pub async fn git_abort_operation(
+    project_id: String,
+    state: State<'_, AppState>,
+) -> Result<(), String> {
+    let project = resolve_project(&state, &project_id)?;
+    let in_progress = crate::git::GitExecutor::detect_in_progress_op(&project.path)
+        .ok_or_else(|| "当前没有进行中的合并/变基操作".to_string())?;
+
+    let args: Vec<&str> = match in_progress.kind.as_str() {
+        "merge" => vec!["merge", "--abort"],
+        "rebase" => vec!["rebase", "--abort"],
+        "cherry-pick" => vec!["cherry-pick", "--abort"],
+        "revert" => vec!["revert", "--abort"],
+        other => return Err(format!("不支持中止的操作：{}", other)),
+    };
+
+    let result = state.git.exec(&project.path, &args).await;
+    state.cache.invalidate(&project_id);
+    if !result.success {
+        return Err(format!("中止失败：{}", result.stderr));
+    }
+    Ok(())
+}
+
+/// 继续进行中的 merge / rebase / cherry-pick / revert
+/// merge：在冲突已解决后提交；其余走对应 continue
+#[tauri::command]
+pub async fn git_merge_continue(
+    project_id: String,
+    message: Option<String>,
+    state: State<'_, AppState>,
+) -> Result<GitCommitResult, String> {
+    let project = resolve_project(&state, &project_id)?;
+    let in_progress = crate::git::GitExecutor::detect_in_progress_op(&project.path)
+        .ok_or_else(|| "当前没有进行中的合并/变基操作".to_string())?;
+
+    let unmerged = state.git.exec(&project.path, &["ls-files", "-u"]).await;
+    if unmerged.success && !unmerged.stdout.trim().is_empty() {
+        return Err("仍有未解决的冲突文件".to_string());
+    }
+
+    let result = match in_progress.kind.as_str() {
+        "merge" => match message.map(|m| m.trim().to_string()) {
+            Some(msg) if !msg.is_empty() => {
+                let args = ["commit", "-m", msg.as_str()];
+                state.git.exec(&project.path, &args).await
+            }
+            _ => state.git.exec(&project.path, &["commit", "--no-edit"]).await,
+        },
+        "rebase" => {
+            // 停在冲突点时通常应使用 --continue；此处仅在无冲突残留时推进
+            state.git.exec(&project.path, &["rebase", "--continue"]).await
+        }
+        "cherry-pick" => state
+            .git
+            .exec(&project.path, &["cherry-pick", "--continue"])
+            .await,
+        "revert" => state.git.exec(&project.path, &["revert", "--continue"]).await,
+        other => {
+            return Err(format!("不支持继续该操作：{}", other));
+        }
+    };
+
+    if !result.success {
+        return Err(format!("完成操作失败：{}", result.stderr));
+    }
+
+    let show = state
+        .git
+        .exec(&project.path, &["show", "-s", "--format=%H%n%s", "HEAD"])
+        .await;
+    let (commit_sha, summary) = if show.success {
+        let mut lines = show.stdout.lines();
+        (
+            lines.next().unwrap_or("").to_string(),
+            lines.next().unwrap_or("").to_string(),
+        )
+    } else {
+        (String::new(), String::new())
+    };
+
+    state.cache.invalidate(&project_id);
+    Ok(GitCommitResult {
+        commit_sha,
+        summary,
+    })
+}
+
+/// 采纳一侧解决冲突（ours=当前分支，theirs=被合入分支），并自动 `git add`
+#[tauri::command]
+pub async fn git_resolve_conflict(
+    project_id: String,
+    paths: Vec<String>,
+    side: ConflictSide,
+    state: State<'_, AppState>,
+) -> Result<(), String> {
+    let project = resolve_project(&state, &project_id)?;
+    if paths.is_empty() {
+        return Ok(());
+    }
+
+    let side_flag = match side {
+        ConflictSide::Ours => "--ours",
+        ConflictSide::Theirs => "--theirs",
+    };
+
+    let mut checkout_args: Vec<String> = vec!["checkout".into(), side_flag.into(), "--".into()];
+    for p in &paths {
+        checkout_args.push(p.clone());
+    }
+    let refs: Vec<&str> = checkout_args.iter().map(|s| s.as_str()).collect();
+    let r = state.git.exec(&project.path, &refs).await;
+
+    // checkout 失败时仍尝试 add：例如 delete/modify 冲突一侧无文件内容
+    let mut add_args: Vec<String> = vec!["add".into(), "--".into()];
+    for p in &paths {
+        add_args.push(p.clone());
+    }
+    let add_refs: Vec<&str> = add_args.iter().map(|s| s.as_str()).collect();
+    let a = state.git.exec(&project.path, &add_refs).await;
+    if !a.success {
+        let detail = if !r.success {
+            format!("{} | {}", r.stderr.trim(), a.stderr.trim())
+        } else {
+            a.stderr.trim().to_string()
+        };
+        return Err(format!(
+            "采纳「{}」失败：{}",
+            match side {
+                ConflictSide::Ours => "我方",
+                ConflictSide::Theirs => "对方",
+            },
+            detail
+        ));
+    }
+
+    state.cache.invalidate(&project_id);
+    Ok(())
+}
+
+/// 手动编辑后标记冲突已解决（git add）
+#[tauri::command]
+pub async fn git_mark_conflict_resolved(
+    project_id: String,
+    paths: Vec<String>,
+    state: State<'_, AppState>,
+) -> Result<(), String> {
+    let project = resolve_project(&state, &project_id)?;
+    if paths.is_empty() {
+        return Ok(());
+    }
+    let mut args: Vec<String> = vec!["add".into(), "--".into()];
+    for p in &paths {
+        args.push(p.clone());
+    }
+    let refs: Vec<&str> = args.iter().map(|s| s.as_str()).collect();
+    let r = state.git.exec(&project.path, &refs).await;
+    if !r.success {
+        return Err(format!("标记已解决失败：{}", r.stderr));
+    }
+    state.cache.invalidate(&project_id);
+    Ok(())
+}
+
+/// 读取冲突文件的三路内容（base / ours / theirs）
+#[tauri::command]
+pub async fn git_conflict_file_content(
+    project_id: String,
+    path: String,
+    state: State<'_, AppState>,
+) -> Result<ConflictFileContent, String> {
+    let project = resolve_project(&state, &project_id)?;
+
+    async fn show_stage(
+        git: &crate::git::GitExecutor,
+        repo: &str,
+        stage: u8,
+        path: &str,
+    ) -> (String, bool) {
+        let spec = format!(":{}:{}", stage, path);
+        let r = git.exec(repo, &["show", &spec]).await;
+        if r.success {
+            (r.stdout, true)
+        } else {
+            (String::new(), false)
+        }
+    }
+
+    let (base, exists_base) = show_stage(&state.git, &project.path, 1, &path).await;
+    let (ours, exists_ours) = show_stage(&state.git, &project.path, 2, &path).await;
+    let (theirs, exists_theirs) = show_stage(&state.git, &project.path, 3, &path).await;
+
+    let is_binary =
+        base.contains('\0') || ours.contains('\0') || theirs.contains('\0');
+
+    Ok(ConflictFileContent {
+        path,
+        base,
+        ours,
+        theirs,
+        exists_base,
+        exists_ours,
+        exists_theirs,
+        is_binary,
     })
 }
 

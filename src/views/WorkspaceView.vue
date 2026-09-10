@@ -89,8 +89,8 @@
 </template>
 
 <script setup lang="ts">
-import { computed, ref } from 'vue';
-import { useRouter } from 'vue-router';
+import { computed, ref, watch } from 'vue';
+import { useRoute, useRouter } from 'vue-router';
 import { ArrowLeft, GitBranch, X } from 'lucide-vue-next';
 import { useAppStore } from '../stores/appStore';
 import FileTree from '../components/Explorer/FileTree.vue';
@@ -108,6 +108,7 @@ const props = defineProps<{
 
 const appStore = useAppStore();
 const router = useRouter();
+const route = useRoute();
 
 const project = computed(() => appStore.projects.find((p) => p.id === props.projectId) ?? null);
 
@@ -161,6 +162,17 @@ async function onOpenFile(path: string) {
     proxy.loading = false;
   }
 }
+
+// 支持从 SCM「编辑」跳转：/workspace/:id?file=rel/path
+watch(
+  () => [project.value, route.query.file] as const,
+  ([proj, file]) => {
+    if (!proj || typeof file !== 'string' || !file) return;
+    const abs = `${proj.path.replace(/\/$/, '')}/${file}`;
+    void onOpenFile(abs);
+  },
+  { immediate: true },
+);
 
 function updateContent(value: string) {
   const tab = activeTab.value;
