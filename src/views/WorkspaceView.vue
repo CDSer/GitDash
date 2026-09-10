@@ -144,8 +144,26 @@ function basename(p: string) {
   return p.split(/[\\/]/).pop() || p;
 }
 
-function langOf(p: string) {
-  const parts = p.split('.');
+function langOf(p: string): string {
+  const name = p.split(/[\\/]/).pop() ?? p;
+  const lower = name.toLowerCase();
+
+  // 特殊文件名
+  if (lower === 'dockerfile' || lower.startsWith('dockerfile.')) return 'dockerfile';
+  if (lower === 'makefile' || lower === 'gnumakefile' || lower === 'cmakelists.txt') {
+    return lower === 'cmakelists.txt' ? 'cmake' : 'makefile';
+  }
+  if (lower === 'gemfile' || lower === 'rakefile') return 'ruby';
+  if (lower === 'package.json' || lower.endsWith('package.json')) return 'json';
+  if (lower === 'tsconfig.json' || lower.endsWith('.jsonc')) return 'json';
+  if (lower === '.gitignore' || lower === '.dockerignore' || lower === '.npmrc') {
+    return 'properties';
+  }
+  if (lower.startsWith('.env')) return 'env';
+  if (lower.endsWith('.d.ts')) return 'dts';
+  if (lower.endsWith('.blade.php')) return 'php';
+
+  const parts = name.split('.');
   return parts.length > 1 ? parts.pop()!.toLowerCase() : '';
 }
 
