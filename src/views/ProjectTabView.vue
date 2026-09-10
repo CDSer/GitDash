@@ -37,17 +37,26 @@
       </div>
 
       <div class="tab-header-right">
-        <Button size="sm" variant="ghost" title="刷新" @click="refreshMode">
+        <Button size="sm" variant="outline" title="刷新" @click="refreshMode">
           <RefreshCw :size="14" />
         </Button>
         <Button
           size="sm"
-          variant="ghost"
+          variant="outline"
           :disabled="opBusy"
           title="获取远端更新"
           @click="onFetch"
         >
           <Download :size="14" /> 获取
+        </Button>
+        <Button
+          size="sm"
+          variant="outline"
+          :disabled="opBusy || !!status?.in_progress || !canPush"
+          :title="pushTitle"
+          @click="onPush"
+        >
+          <Upload :size="14" /> 推送
         </Button>
         <Button
           size="sm"
@@ -75,7 +84,7 @@
       />
       <HistoryPanel
         v-else
-        :key="`hi-${project.id}`"
+        :key="`hi-${project.id}-${historyRefreshKey}`"
         :project-id="project.id"
         embedded
       />
@@ -87,8 +96,8 @@
 </template>
 
 <script setup lang="ts">
-import { computed, defineAsyncComponent } from 'vue';
-import { GitBranch, RefreshCw, Download, FolderTree, GitCommitHorizontal, GitMerge } from 'lucide-vue-next';
+import { computed, defineAsyncComponent, ref } from 'vue';
+import { GitBranch, RefreshCw, Download, Upload, FolderTree, GitCommitHorizontal, GitMerge } from 'lucide-vue-next';
 import type { ProjectTabMode } from '../stores/tabStore';
 import { useAppStore } from '../stores/appStore';
 import { useTabStore } from '../stores/tabStore';
@@ -119,6 +128,9 @@ const mode = computed<ProjectTabMode>(
   () => tabStore.tabs.find((t) => t.projectId === props.projectId)?.mode ?? 'history',
 );
 
+/** 推送成功后 bump，强制历史面板重新拉取（刷新未推送标记） */
+const historyRefreshKey = ref(0);
+
 const modes = [
   { value: 'changes' as const, label: '变更', icon: GitMerge },
   { value: 'history' as const, label: '历史', icon: GitCommitHorizontal },
@@ -132,6 +144,12 @@ const changeBadge = computed(() => {
 });
 
 const opBusy = computed(() => operationStore.isQueueRunning);
+const canPush = computed(() => (status.value?.ahead ?? 0) > 0);
+const pushTitle = computed(() => {
+  if (status.value?.in_progress) return '有进行中的合并/变基，无法推送';
+  if (!canPush.value) return '没有需要推送的提交';
+  return `推送 ${status.value?.ahead ?? 0} 个提交到远程`;
+});
 
 function setMode(m: ProjectTabMode) {
   tabStore.setMode(props.projectId, m);
@@ -143,14 +161,44 @@ async function refreshMode() {
   toast.info('已刷新状态');
 }
 
+function latestTaskMessage(projectId: string): string | null {
+  const list = operationStore.tasks.filter((t) => t.projectId === projectId);
+  const last = list[list.length - 1];
+  if (!last || last.status !== 'error') return null;
+  return last.message || '操作失败';
+}
+
 async function onFetch() {
   if (opBusy.value) return;
   try {
     await operationStore.batchFetch([props.projectId]);
     await getStatus(props.projectId, true);
-    toast.success('获取完成');
+    const errMsg = latestTaskMessage(props.projectId);
+    if (errMsg) {
+      toast.error(`获取失败：${errMsg}`);
+    } else {
+      toast.success('获取完成');
+    }
   } catch {
     toast.error('获取失败');
+  }
+}
+
+async function onPush() {
+  if (opBusy.value || !canPush.value || status.value?.in_progress) return;
+  try {
+    await operationStore.batchPush([props.projectId]);
+    await getStatus(props.projectId, true);
+    const errMsg = latestTaskMessage(props.projectId);
+    if (errMsg) {
+      toast.error(`推送失败：${errMsg}`);
+    } else {
+      toast.success('推送完成');
+      // 推送成功后刷新历史列表的 is_pushed 标记
+      historyRefreshKey.value += 1;
+    }
+  } catch {
+    toast.error('推送失败');
   }
 }
 </script>
@@ -241,6 +289,7 @@ async function onFetch() {
   gap: 4px;
   flex-shrink: 0;
 }
+
 .tab-body {
   flex: 1;
   min-height: 0;
