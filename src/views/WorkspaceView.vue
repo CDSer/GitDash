@@ -5,6 +5,7 @@
 <template>
   <div class="flex h-full flex-col overflow-hidden">
     <header
+      v-if="!embedded"
       class="flex h-12 shrink-0 items-center justify-between border-b border-border bg-card px-4"
     >
       <div class="flex min-w-0 items-center gap-2">
@@ -26,6 +27,17 @@
         </Button>
       </div>
     </header>
+
+    <div v-else class="flex h-9 shrink-0 items-center justify-end border-b border-border bg-card px-2">
+      <Button
+        variant="ghost"
+        size="sm"
+        :class="showGitPanel ? 'text-primary' : ''"
+        @click="showGitPanel = !showGitPanel"
+      >
+        <GitBranch :size="14" /> Git 图
+      </Button>
+    </div>
 
     <div class="flex min-h-0 flex-1">
       <aside class="w-[260px] shrink-0 flex flex-col overflow-hidden border-r border-border bg-card">
@@ -104,6 +116,8 @@ import { toast } from '../lib/toast';
 
 const props = defineProps<{
   projectId: string;
+  /** 标签页嵌入：隐藏页头「返回」 */
+  embedded?: boolean;
 }>();
 
 const appStore = useAppStore();

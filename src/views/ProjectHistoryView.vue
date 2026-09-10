@@ -6,6 +6,7 @@
 <template>
   <div class="flex h-full flex-col overflow-hidden">
     <header
+      v-if="!embedded"
       class="flex h-12 shrink-0 items-center justify-between border-b border-border bg-card px-4"
     >
       <div class="flex min-w-0 items-center gap-2">
@@ -192,7 +193,11 @@ import Divider from '../components/ui/Divider.vue';
 import DiffViewer from '../components/Git/DiffViewer.vue';
 import { toast } from '../lib/toast';
 
-const props = defineProps<{ projectId: string }>();
+const props = defineProps<{
+  projectId: string;
+  /** 标签页嵌入：隐藏页头「返回」 */
+  embedded?: boolean;
+}>();
 
 const appStore = useAppStore();
 const router = useRouter();

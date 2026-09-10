@@ -201,7 +201,7 @@ import {
 import type { Project, ProjectStatus } from '../../types';
 import { useAppStore } from '../../stores/appStore';
 import { useOperationStore } from '../../stores/operationStore';
-import { useRouter } from 'vue-router';
+import { useTabStore } from '../../stores/tabStore';
 import { openRepoFolder } from '../../lib/tauriApi';
 import StatusBadge from './StatusBadge.vue';
 import StatusChanges from './StatusChanges.vue';
@@ -221,7 +221,7 @@ import Empty from '../ui/Empty.vue';
 
 const appStore = useAppStore();
 const operationStore = useOperationStore();
-const router = useRouter();
+const tabStore = useTabStore();
 const { getStatus } = useProjectStatus();
 
 const showSourceControl = ref(false);
@@ -285,12 +285,11 @@ function groupName(groupId: string | null) {
 }
 
 function enterWorkspace(project: Project) {
-  router.push({ name: 'workspace', params: { projectId: project.id } });
+  tabStore.openProject(project.id, 'workspace');
 }
 
 function openHistory(project: Project) {
-  // Git 记录已改为独立路由页面
-  router.push({ name: 'history', params: { projectId: project.id } });
+  tabStore.openProject(project.id, 'history');
 }
 
 function openSourceControl(project: Project) {

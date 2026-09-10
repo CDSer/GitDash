@@ -203,6 +203,7 @@ import { useRouter } from 'vue-router';
 import type { Commit, Project, ProjectStatus } from '../types';
 import { useAppStore } from '../stores/appStore';
 import { useOperationStore } from '../stores/operationStore';
+import { useTabStore } from '../stores/tabStore';
 import { useProjectStatus } from '../composables/useProjectStatus';
 import { getCommits } from '../lib/tauriApi';
 import { toast } from '../lib/toast';
@@ -218,6 +219,7 @@ const SourceControlModal = defineAsyncComponent(
 
 const appStore = useAppStore();
 const operationStore = useOperationStore();
+const tabStore = useTabStore();
 const { getStatus } = useProjectStatus();
 const router = useRouter();
 
@@ -479,10 +481,11 @@ function onAttentionClick(item: { project: Project; kind: string }) {
 
 function openHistoryById(projectId: string) {
   rememberFavorite(projectId);
-  router.push({ name: 'history', params: { projectId } });
+  tabStore.openProject(projectId, 'history');
 }
 
 function goProjects() {
+  tabStore.setActive(null);
   router.push({ name: 'projects' });
 }
 

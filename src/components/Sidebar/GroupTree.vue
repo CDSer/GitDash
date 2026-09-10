@@ -151,6 +151,7 @@
 import { computed, ref, onMounted, watch, onBeforeUnmount } from 'vue';
 import { Plus, Pencil, Trash2, FolderX, ChevronRight, ChevronDown, Home, List } from 'lucide-vue-next';
 import { useAppStore } from '../../stores/appStore';
+import { useTabStore } from '../../stores/tabStore';
 import { useDragProject } from '../../composables/useDragProject';
 import { useRoute, useRouter } from 'vue-router';
 import type { Group, Project } from '../../types';
@@ -169,6 +170,7 @@ const ConfirmDialog = defineAsyncComponent(
 import { toast } from '../../lib/toast';
 
 const appStore = useAppStore();
+const tabStore = useTabStore();
 const drag = useDragProject();
 const route = useRoute();
 const router = useRouter();
@@ -219,21 +221,26 @@ watch(
 
 function selectGroup(groupId: string) {
   appStore.activeGroupId = groupId;
-  // 从主页点分组时切到项目列表，保证过滤结果可见
+  // 有活动标签时先取消激活，才能露出 RouterView（项目列表）
+  if (tabStore.activeProjectId) {
+    tabStore.setActive(null);
+  }
   if (route.name !== 'projects') {
     router.push({ name: 'projects' });
   }
 }
 
-const isHomeRoute = computed(() => route.name === 'home');
-const isProjectsRoute = computed(() => route.name === 'projects');
+const isHomeRoute = computed(() => route.name === 'home' && !tabStore.activeProjectId);
+const isProjectsRoute = computed(() => route.name === 'projects' && !tabStore.activeProjectId);
 
 function goHome() {
+  tabStore.setActive(null);
   router.push({ name: 'home' });
 }
 
 function goProjects() {
   appStore.activeGroupId = 'all';
+  tabStore.setActive(null);
   router.push({ name: 'projects' });
 }
 
@@ -431,10 +438,10 @@ function projectsInGroup(groupId: string): Project[] {
   return appStore.projects.filter((p) => p.group_id === groupId);
 }
 
-// 点击左侧项目行进入 Git 记录页（拖拽后松手瞬间忽略，避免误跳转）
+// 点击左侧项目行：打开多标签（默认历史模式）
 function openProjectHistory(project: Project) {
   if (drag.wasDraggingRecently()) return;
-  router.push({ name: 'history', params: { projectId: project.id } });
+  tabStore.openProject(project.id, 'history');
 }
 
 function openAddGroup() {
