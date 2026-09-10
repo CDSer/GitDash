@@ -147,6 +147,8 @@ export interface Commit {
   email: string;
   date: number;
   parents: string[];
+  /** 是否已推送到上游（无上游时为 true） */
+  is_pushed?: boolean;
 }
 
 /** 提交中的文件改动（含增删行数与改名） */

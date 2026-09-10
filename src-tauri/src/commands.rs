@@ -663,10 +663,75 @@ pub async fn get_commits(
             email,
             date,
             parents,
+            is_pushed: true,
         });
     }
 
+    mark_unpushed(&state.git, &project.path, &branch, &mut commits).await;
+
     Ok(commits)
+}
+
+/// 用上游分支标记未推送提交（无上游则不改）
+async fn mark_unpushed(
+    git: &GitExecutor,
+    path: &str,
+    branch: &str,
+    commits: &mut [Commit],
+) {
+    if commits.is_empty() {
+        return;
+    }
+
+    // 远程分支上的提交本身已在远端
+    let symbolic = git
+        .exec(path, &["rev-parse", "--symbolic-full-name", branch])
+        .await;
+    if symbolic.success {
+        let refname = symbolic.stdout.trim();
+        if refname.starts_with("refs/remotes/") {
+            return;
+        }
+    }
+
+    let upstream = format!("{branch}@{{upstream}}");
+    let up = git
+        .exec(
+            path,
+            &["rev-parse", "--abbrev-ref", "--symbolic-full-name", &upstream],
+        )
+        .await;
+    if !up.success {
+        return;
+    }
+    let up_name = up.stdout.trim();
+    if up_name.is_empty() || up_name == branch {
+        return;
+    }
+
+    // upstream..branch = 本地有、上游没有 → 未推送
+    let revs = git
+        .exec(path, &["rev-list", &format!("{up_name}..{branch}")])
+        .await;
+    if !revs.success {
+        return;
+    }
+
+    let unpushed: std::collections::HashSet<&str> = revs
+        .stdout
+        .lines()
+        .map(|l| l.trim())
+        .filter(|l| !l.is_empty())
+        .collect();
+    if unpushed.is_empty() {
+        return;
+    }
+
+    for c in commits.iter_mut() {
+        if unpushed.contains(c.id.as_str()) {
+            c.is_pushed = false;
+        }
+    }
 }
 
 /// 获取单次提交详情（含完整 message 和改动文件列表）
@@ -735,6 +800,7 @@ pub async fn get_commit_detail(
             email,
             date,
             parents,
+            is_pushed: true,
         },
         body,
         files,

@@ -120,9 +120,9 @@ const mode = computed<ProjectTabMode>(
 );
 
 const modes = [
-  { value: 'workspace' as const, label: '工作区', icon: FolderTree },
   { value: 'changes' as const, label: '变更', icon: GitMerge },
   { value: 'history' as const, label: '历史', icon: GitCommitHorizontal },
+  { value: 'workspace' as const, label: '工作区', icon: FolderTree },
 ];
 
 const changeBadge = computed(() => {

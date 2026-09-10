@@ -189,6 +189,10 @@ pub struct Branch {
     pub worktree_path: Option<String>,
 }
 
+fn default_true() -> bool {
+    true
+}
+
 /// Git 提交记录
 #[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct Commit {
@@ -199,6 +203,9 @@ pub struct Commit {
     pub email: String,
     pub date: i64,
     pub parents: Vec<String>,
+    /// 是否已推送到上游（无上游跟踪时视为 true，不标未推送）
+    #[serde(default = "default_true")]
+    pub is_pushed: bool,
 }
 
 /// 提交中的文件改动（含增删行数、改名信息）
