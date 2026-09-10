@@ -162,9 +162,20 @@
       <Empty description="项目不存在或已被移除" />
     </div>
 
-    <Dialog v-model="fileDiffVisible" :title="`文件改动 · ${fileDiffTitle}`" width="720px">
+    <Dialog
+      v-model="fileDiffVisible"
+      :title="`文件改动 · ${fileDiffTitle}`"
+      size="xl"
+      flush
+    >
       <div class="file-diff-box">
-        <DiffViewer :patch="fileDiffPatch" :is-binary="fileDiffBinary" empty-text="该文件无文本差异" />
+        <DiffViewer
+          :original="fileDiffOriginal"
+          :modified="fileDiffModified"
+          :patch="fileDiffPatch"
+          :is-binary="fileDiffBinary"
+          empty-text="该文件无文本差异"
+        />
       </div>
     </Dialog>
   </div>
@@ -212,6 +223,8 @@ const detail = ref<CommitDetail | null>(null);
 const loadingCommits = ref(false);
 const remoteUrl = ref<string | null>(null);
 const fileDiffVisible = ref(false);
+const fileDiffOriginal = ref('');
+const fileDiffModified = ref('');
 const fileDiffPatch = ref('');
 const fileDiffBinary = ref(false);
 const fileDiffTitle = ref('');
@@ -358,7 +371,9 @@ async function openFileDiff(f: CommitFile) {
       f.original_path ?? undefined,
     );
     fileDiffBinary.value = res.is_binary;
-    fileDiffPatch.value = res.fallback_patch || res.modified_content || '';
+    fileDiffOriginal.value = res.original_content;
+    fileDiffModified.value = res.modified_content;
+    fileDiffPatch.value = res.fallback_patch;
     fileDiffVisible.value = true;
   } catch (e) {
     console.error('加载文件 diff 失败：', e);
@@ -678,6 +693,8 @@ function statusVariant(status: string): 'success' | 'danger' | 'warning' | 'info
   margin-top: 6px;
 }
 .file-diff-box {
-  height: 520px;
+  flex: 1;
+  min-height: 0;
+  height: 100%;
 }
 </style>

@@ -5,15 +5,21 @@
         class="ui-dialog-overlay data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:animate-in data-[state=open]:fade-in-0"
       />
       <DialogContent
-        class="ui-dialog-content data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:animate-in data-[state=open]:fade-in-0"
-        :style="width ? { maxWidth: width } : undefined"
+        :class="[
+          'ui-dialog-content',
+          sizeClass,
+          'data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:animate-in data-[state=open]:fade-in-0',
+        ]"
+        :style="contentStyle"
       >
         <DialogTitle v-if="title" class="ui-dialog-title">{{ title }}</DialogTitle>
         <DialogDescription class="sr-only" />
         <DialogClose class="ui-dialog-close" aria-label="关闭">
           <X :size="16" />
         </DialogClose>
-        <div class="ui-dialog-body"><slot /></div>
+        <div class="ui-dialog-body" :class="{ 'ui-dialog-body--flush': flush }">
+          <slot />
+        </div>
         <div v-if="$slots.footer" class="ui-dialog-footer"><slot name="footer" /></div>
       </DialogContent>
     </DialogPortal>
@@ -21,6 +27,7 @@
 </template>
 
 <script setup lang="ts">
+import { computed } from 'vue';
 import {
   DialogRoot,
   DialogPortal,
@@ -32,16 +39,37 @@ import {
 } from 'reka-ui';
 import { X } from 'lucide-vue-next';
 
-withDefaults(
+const props = withDefaults(
   defineProps<{
     modelValue: boolean;
     title?: string;
+    /** 兼容旧用法的固定宽度，例如 520px */
     width?: string;
+    /** 预设尺寸；xl 适合 diff 等大内容 */
+    size?: 'md' | 'lg' | 'xl';
+    /** 自定义高度，例如 90vh */
+    height?: string;
+    /** 去掉 body 内边距，让内容铺满 */
+    flush?: boolean;
   }>(),
-  { title: '', width: '520px' },
+  { title: '', width: '', size: 'md', height: '', flush: false },
 );
 
 const emit = defineEmits<{ (e: 'update:modelValue', v: boolean): void }>();
+
+const sizeClass = computed(() => {
+  if (props.height || props.width) return '';
+  if (props.size === 'xl') return 'ui-dialog-content--xl';
+  if (props.size === 'lg') return 'ui-dialog-content--lg';
+  return 'ui-dialog-content--md';
+});
+
+const contentStyle = computed(() => {
+  const style: Record<string, string> = {};
+  if (props.height) style.maxHeight = props.height;
+  if (props.width) style.maxWidth = props.width;
+  return style;
+});
 </script>
 
 <style scoped>
@@ -69,6 +97,18 @@ const emit = defineEmits<{ (e: 'update:modelValue', v: boolean): void }>();
   box-shadow: 0 16px 48px rgba(0, 0, 0, 0.3);
   overflow: hidden;
 }
+.ui-dialog-content--md {
+  max-width: 520px;
+}
+.ui-dialog-content--lg {
+  max-width: 900px;
+}
+.ui-dialog-content--xl {
+  width: calc(100vw - 48px);
+  max-width: 1400px;
+  max-height: 92vh;
+  height: 92vh;
+}
 .ui-dialog-title {
   margin: 0;
   padding: 14px 16px 12px 16px;
@@ -76,6 +116,10 @@ const emit = defineEmits<{ (e: 'update:modelValue', v: boolean): void }>();
   font-weight: 600;
   border-bottom: 1px solid var(--border);
   flex-shrink: 0;
+  padding-right: 40px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 .ui-dialog-close {
   position: absolute;
@@ -100,6 +144,13 @@ const emit = defineEmits<{ (e: 'update:modelValue', v: boolean): void }>();
   padding: 16px;
   overflow: auto;
   min-height: 0;
+  flex: 1;
+}
+.ui-dialog-body--flush {
+  padding: 0;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
 }
 .ui-dialog-footer {
   display: flex;

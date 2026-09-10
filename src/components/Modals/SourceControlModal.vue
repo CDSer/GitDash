@@ -209,8 +209,11 @@
           />
           <DiffViewer
             v-else
+            :original="diffOriginal"
+            :modified="diffModified"
             :patch="diffPatch"
             :is-binary="diffIsBinary"
+            :loading="diffLoading"
             :empty-text="diffEmpty"
           />
         </div>
@@ -247,7 +250,7 @@ import {
   gitCheckoutBranch,
   gitCommit,
   gitConflictFileContent,
-  gitDiff,
+  gitDiffContent,
   gitDiscard,
   gitMarkConflictResolved,
   gitMergeContinue,
@@ -279,8 +282,11 @@ const selectedFile = ref<ChangedFile | null>(null);
 const commitMessage = ref('');
 const showMergeModal = ref(false);
 
+const diffOriginal = ref('');
+const diffModified = ref('');
 const diffPatch = ref('');
 const diffIsBinary = ref(false);
+const diffLoading = ref(false);
 const diffEmpty = ref('选择左侧文件查看改动');
 
 const conflictContent = ref<ConflictFileContent | null>(null);
@@ -427,6 +433,8 @@ async function loadDiff(f: ChangedFile) {
   if (f.is_conflict) {
     conflictContent.value = null;
     conflictLoading.value = true;
+    diffOriginal.value = '';
+    diffModified.value = '';
     diffPatch.value = '';
     try {
       conflictContent.value = await gitConflictFileContent(props.project.id, f.path);
@@ -442,20 +450,33 @@ async function loadDiff(f: ChangedFile) {
   conflictContent.value = null;
   diffIsBinary.value = false;
   diffEmpty.value = `${f.path} 无改动`;
+  diffLoading.value = true;
+  diffOriginal.value = '';
+  diffModified.value = '';
+  diffPatch.value = '';
   try {
     if (isUntracked(f)) {
       const content = await readFile([props.project.path, f.path].join('/'));
-      diffPatch.value = content;
+      diffOriginal.value = '';
+      diffModified.value = content;
       diffEmpty.value = '未跟踪的新文件';
-    } else if (f.staged) {
-      diffPatch.value = await gitDiff(props.project.id, f.path, true);
     } else {
-      diffPatch.value = await gitDiff(props.project.id, f.path, false);
+      const res = await gitDiffContent(
+        props.project.id,
+        f.path,
+        !!f.staged,
+        f.original_path || undefined,
+      );
+      diffOriginal.value = res.original_content;
+      diffModified.value = res.modified_content;
+      diffPatch.value = res.fallback_patch;
+      diffIsBinary.value = res.is_binary;
     }
   } catch (e) {
-    diffPatch.value = '';
     diffEmpty.value = '无法加载 diff';
     console.error('加载 diff 失败：', e);
+  } finally {
+    diffLoading.value = false;
   }
 }
 
