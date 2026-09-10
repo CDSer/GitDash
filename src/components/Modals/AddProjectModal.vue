@@ -133,6 +133,8 @@ async function addProject() {
   background-color: color-mix(in oklab, var(--primary) 10%, transparent);
 }
 .drop-icon {
+  display: block;
+  margin: 0 auto;
   color: var(--muted-foreground);
 }
 .drop-text {
