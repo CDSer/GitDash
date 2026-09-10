@@ -183,7 +183,6 @@
 
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from 'vue';
-import { useRouter } from 'vue-router';
 import { open } from '@tauri-apps/plugin-shell';
 import { ArrowLeft, ExternalLink, GitCommitHorizontal, RefreshCw } from 'lucide-vue-next';
 import type { Branch, Commit, CommitDetail, CommitFile } from '../types';
@@ -195,6 +194,7 @@ import {
   gitCommitFileDiff,
 } from '../lib/tauriApi';
 import { useAppStore } from '../stores/appStore';
+import { useTabStore } from '../stores/tabStore';
 import Dialog from '../components/ui/Dialog.vue';
 import Tag from '../components/ui/Tag.vue';
 import Button from '../components/ui/Button.vue';
@@ -211,7 +211,7 @@ const props = defineProps<{
 }>();
 
 const appStore = useAppStore();
-const router = useRouter();
+const tabStore = useTabStore();
 
 const project = computed(() => appStore.projects.find((p) => p.id === props.projectId) ?? null);
 
@@ -326,11 +326,7 @@ const startBranchResize = beginResize('--history-branch-width', BRANCH_WIDTH_KEY
 const startDetailResize = beginResize('--history-detail-width', DETAIL_WIDTH_KEY, -1, DETAIL_DEFAULT);
 
 function goBack() {
-  if (window.history.length > 1) {
-    router.back();
-  } else {
-    router.push({ name: 'projects' });
-  }
+  tabStore.openProjectsTab();
 }
 
 async function reload() {

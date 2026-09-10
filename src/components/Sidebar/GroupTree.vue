@@ -24,9 +24,14 @@
       >
         <List :size="14" /> 项目
       </Button>
-      <Button variant="outline" class="w-full" @click="openAddGroup">
-        <Plus :size="14" /> 添加分组
-      </Button>
+      <div class="flex gap-1.5">
+        <Button variant="outline" class="min-w-0 flex-1" @click="$emit('add-project')">
+          <Plus :size="14" /> 添加项目
+        </Button>
+        <Button variant="outline" class="min-w-0 flex-1" @click="openAddGroup">
+          <Plus :size="14" /> 添加分组
+        </Button>
+      </div>
     </div>
 
     <div ref="scrollContainer" class="min-h-0 flex-1 overflow-y-auto p-1.5">
@@ -161,6 +166,8 @@ import ContextMenu from '../ui/ContextMenu.vue';
 import ContextMenuItem from '../ui/ContextMenuItem.vue';
 import Divider from '../ui/Divider.vue';
 
+defineEmits<{ (e: 'add-project'): void }>();
+
 const AddGroupModal = defineAsyncComponent(
   () => import('../Modals/AddGroupModal.vue'),
 );
@@ -221,17 +228,16 @@ watch(
 
 function selectGroup(groupId: string) {
   appStore.activeGroupId = groupId;
-  // 有活动标签时先取消激活，才能露出 RouterView（项目列表）
-  if (tabStore.activeProjectId) {
-    tabStore.setActive(null);
-  }
-  if (route.name !== 'projects') {
-    router.push({ name: 'projects' });
-  }
+  // 打开项目列表系统标签（保持 tab 体系）
+  tabStore.openProjectsTab();
 }
 
-const isHomeRoute = computed(() => route.name === 'home' && !tabStore.activeProjectId);
-const isProjectsRoute = computed(() => route.name === 'projects' && !tabStore.activeProjectId);
+const isHomeRoute = computed(
+  () => tabStore.viewKind === 'home' || (route.name === 'home' && !tabStore.activeProjectId),
+);
+const isProjectsRoute = computed(
+  () => tabStore.viewKind === 'projects' || (route.name === 'projects' && !tabStore.activeProjectId),
+);
 
 function goHome() {
   tabStore.setActive(null);
@@ -240,8 +246,7 @@ function goHome() {
 
 function goProjects() {
   appStore.activeGroupId = 'all';
-  tabStore.setActive(null);
-  router.push({ name: 'projects' });
+  tabStore.openProjectsTab();
 }
 
 let suppressRowClickUntil = 0;

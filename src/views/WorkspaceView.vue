@@ -102,9 +102,10 @@
 
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue';
-import { useRoute, useRouter } from 'vue-router';
+import { useRoute } from 'vue-router';
 import { ArrowLeft, GitBranch, X } from 'lucide-vue-next';
 import { useAppStore } from '../stores/appStore';
+import { useTabStore } from '../stores/tabStore';
 import FileTree from '../components/Explorer/FileTree.vue';
 import CodeEditor from '../components/Editor/CodeEditor.vue';
 import GitGraphPanel from '../components/Git/GitGraphPanel.vue';
@@ -121,7 +122,7 @@ const props = defineProps<{
 }>();
 
 const appStore = useAppStore();
-const router = useRouter();
+const tabStore = useTabStore();
 const route = useRoute();
 
 const project = computed(() => appStore.projects.find((p) => p.id === props.projectId) ?? null);
@@ -233,6 +234,6 @@ function closeTab(path: string) {
 }
 
 function backToProjects() {
-  router.push({ name: 'projects' });
+  tabStore.openProjectsTab();
 }
 </script>

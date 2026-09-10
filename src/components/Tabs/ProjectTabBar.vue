@@ -1,12 +1,35 @@
 <!--
-  项目标签栏（Fork / 浏览器风格）
-  横向标签：仓库名 + 状态点 + 关闭；右侧 + 打开项目
+  标签栏（Fork / 浏览器风格）
+  横向标签：项目列表系统标签 + 仓库标签；右侧 + 打开项目
   中键关闭；右键菜单：切换模式 / 关闭
 -->
 <template>
   <div class="tab-bar" role="tablist">
     <div class="tab-strip">
-      <ContextMenu v-for="tab in tabs" :key="tab.projectId">
+      <!-- 项目列表系统标签（置首，可关闭） -->
+      <div
+        v-if="hasProjectsTab"
+        class="tab-item tab-item--system"
+        :class="{ 'tab-item--active': isProjectsActive }"
+        title="项目列表"
+        role="tab"
+        :aria-selected="isProjectsActive"
+        @click="tabStore.setActive(PROJECTS_TAB_ID)"
+        @auxclick.middle.prevent="tabStore.closeTab(PROJECTS_TAB_ID)"
+      >
+        <span class="tab-dot tab-dot--none" />
+        <span class="tab-label tab-label--system">项目列表</span>
+        <button
+          type="button"
+          class="tab-close"
+          title="关闭标签"
+          @click.stop="tabStore.closeTab(PROJECTS_TAB_ID)"
+        >
+          <X :size="12" />
+        </button>
+      </div>
+
+      <ContextMenu v-for="tab in projectTabs" :key="tab.projectId">
         <template #trigger>
           <div
             class="tab-item"
@@ -43,7 +66,7 @@
         <ContextMenuItem @click="tabStore.closeOtherTabs(tab.projectId)">
           关闭其他
         </ContextMenuItem>
-        <ContextMenuItem @click="tabStore.closeAllTabs()">关闭全部</ContextMenuItem>
+        <ContextMenuItem @click="closeAll">关闭全部</ContextMenuItem>
       </ContextMenu>
 
       <button
@@ -66,7 +89,7 @@
 import { computed } from 'vue';
 import { Plus, X } from 'lucide-vue-next';
 import { useAppStore } from '../../stores/appStore';
-import { useTabStore } from '../../stores/tabStore';
+import { useTabStore, PROJECTS_TAB_ID } from '../../stores/tabStore';
 import ContextMenu from '../ui/ContextMenu.vue';
 import ContextMenuItem from '../ui/ContextMenuItem.vue';
 import ContextMenuDivider from '../ui/Divider.vue';
@@ -76,7 +99,15 @@ defineEmits<{ (e: 'open-picker'): void }>();
 const appStore = useAppStore();
 const tabStore = useTabStore();
 
-const tabs = computed(() => tabStore.tabs);
+const projectTabs = computed(() =>
+  tabStore.tabs.filter((t) => t.projectId !== PROJECTS_TAB_ID),
+);
+const hasProjectsTab = computed(() =>
+  tabStore.tabs.some((t) => t.projectId === PROJECTS_TAB_ID),
+);
+const isProjectsActive = computed(
+  () => tabStore.activeProjectId === PROJECTS_TAB_ID,
+);
 const activeProjectId = computed(() => tabStore.activeProjectId);
 
 function projectName(projectId: string): string {
@@ -94,6 +125,11 @@ function dotTone(projectId: string): string {
   if (s.in_progress || !s.is_clean) return 'warn';
   if (s.ahead || s.behind) return 'info';
   return 'ok';
+}
+
+function closeAll() {
+  // 关闭全部时若只想回到项目列表，可保留系统标签；默认全关回主页
+  tabStore.closeAllTabs();
 }
 </script>
 
@@ -142,6 +178,9 @@ function dotTone(projectId: string): string {
   background-color: var(--background);
   color: var(--foreground);
   box-shadow: inset 0 -2px 0 0 var(--primary);
+}
+.tab-item--system {
+  min-width: 96px;
 }
 .tab-dot {
   width: 7px;

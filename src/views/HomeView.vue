@@ -199,7 +199,6 @@
 <script setup lang="ts">
 import { computed, defineAsyncComponent, onMounted, ref } from 'vue';
 import { Plus, RefreshCw, CheckCircle2 } from 'lucide-vue-next';
-import { useRouter } from 'vue-router';
 import type { Commit, Project, ProjectStatus } from '../types';
 import { useAppStore } from '../stores/appStore';
 import { useOperationStore } from '../stores/operationStore';
@@ -221,7 +220,6 @@ const appStore = useAppStore();
 const operationStore = useOperationStore();
 const tabStore = useTabStore();
 const { getStatus } = useProjectStatus();
-const router = useRouter();
 
 const showAddModal = ref(false);
 const showSourceControl = ref(false);
@@ -485,8 +483,7 @@ function openHistoryById(projectId: string) {
 }
 
 function goProjects() {
-  tabStore.setActive(null);
-  router.push({ name: 'projects' });
+  tabStore.openProjectsTab();
 }
 
 async function fetchAll() {

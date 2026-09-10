@@ -12,7 +12,7 @@
         :class="{ collapsed: sidebarCollapsed, resizing: isResizing }"
       >
         <div v-if="!sidebarCollapsed" class="flex h-full flex-col">
-          <GroupTree />
+          <GroupTree @add-project="showAddModal = true" />
         </div>
 
         <!-- 收起状态：窄条 + 展开按钮 -->
@@ -49,25 +49,15 @@
         <!-- 项目多标签栏（Fork 风格）：始终可见；无标签时也可从 + 打开 -->
         <ProjectTabBar @open-picker="showProjectPicker = true" />
 
-        <!-- 工具栏：仅在无活动标签（主页/列表）时显示完整操作；有标签时 ProjectTabView 自带顶栏 -->
+        <!-- 工具栏：仅在主页显示完整操作；标签视图自带顶栏 -->
         <header
-          v-if="!tabStore.activeTab"
+          v-if="tabStore.viewKind === 'home'"
           class="flex h-12 shrink-0 items-center justify-between border-b border-border bg-card px-4"
         >
           <div class="flex items-center gap-2">
-            <Dropdown>
-              <template #trigger>
-                <Button variant="primary">
-                  <Plus :size="14" /> 添加项目 <ChevronDown :size="14" />
-                </Button>
-              </template>
-              <DropdownItem :icon="Plus" @click="showAddModal = true">
-                单个添加
-              </DropdownItem>
-              <DropdownItem :icon="FolderPlus" @click="showBatchImportModal = true">
-                批量导入
-              </DropdownItem>
-            </Dropdown>
+            <Button variant="ghost" size="icon" title="批量导入" @click="showBatchImportModal = true">
+              <FolderPlus :size="16" />
+            </Button>
             <Button variant="ghost" size="icon" title="设置" @click="showSettings = true">
               <Settings :size="16" />
             </Button>
@@ -86,8 +76,8 @@
             <Button variant="ghost" size="sm" title="设置" @click="showSettings = true">
               <Settings :size="14" />
             </Button>
-            <Button variant="ghost" size="sm" @click="showAddModal = true">
-              <Plus :size="14" /> 添加
+            <Button variant="ghost" size="sm" title="批量导入" @click="showBatchImportModal = true">
+              <FolderPlus :size="14" />
             </Button>
           </div>
         </header>
@@ -95,10 +85,13 @@
         <main class="min-h-0 flex-1 overflow-hidden">
           <!-- 活动项目标签：嵌入工作区 / 变更 / 历史 -->
           <ProjectTabView
-            v-if="tabStore.activeTab"
+            v-if="tabStore.viewKind === 'project' && tabStore.activeTab"
             :key="tabStore.activeTab.projectId"
             :project-id="tabStore.activeTab.projectId"
           />
+          <!-- 项目列表系统标签 -->
+          <ProjectListView v-else-if="tabStore.viewKind === 'projects'" />
+          <!-- 主页（RouterView） -->
           <RouterView v-else />
         </main>
       </div>
@@ -115,7 +108,7 @@
 
 <script setup lang="ts">
 import { ref, computed, onMounted, onUnmounted, defineAsyncComponent } from 'vue';
-import { Plus, Settings, ChevronDown, FolderPlus, PanelLeftOpen, PanelLeftClose } from 'lucide-vue-next';
+import { Settings, FolderPlus, PanelLeftOpen, PanelLeftClose } from 'lucide-vue-next';
 import { useAppStore } from '../stores/appStore';
 import { useProjectStatus } from '../composables/useProjectStatus';
 import { useTabStore } from '../stores/tabStore';
@@ -123,11 +116,12 @@ import GroupTree from '../components/Sidebar/GroupTree.vue';
 import ProjectTabBar from '../components/Tabs/ProjectTabBar.vue';
 import OperationQueue from '../components/OperationPanel/OperationQueue.vue';
 import Button from '../components/ui/Button.vue';
-import Dropdown from '../components/ui/Dropdown.vue';
-import DropdownItem from '../components/ui/DropdownItem.vue';
 
 const ProjectTabView = defineAsyncComponent(
   () => import('./ProjectTabView.vue'),
+);
+const ProjectListView = defineAsyncComponent(
+  () => import('./ProjectListView.vue'),
 );
 
 const AddProjectModal = defineAsyncComponent(
