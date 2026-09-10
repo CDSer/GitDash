@@ -110,8 +110,20 @@ pub struct GitResult {
 #[derive(Serialize, Clone, Debug)]
 pub struct OperationEvent {
     pub task_id: String,
+    /// 关联项目 ID，前端据此匹配任务行
+    pub project_id: String,
     pub status: String,
     pub message: Option<String>,
+}
+
+/// 带项目 ID 的 Git 执行结果（批量操作返回，避免下标错位）
+#[derive(Serialize, Clone, Debug)]
+pub struct ProjectGitResult {
+    pub project_id: String,
+    pub success: bool,
+    pub stdout: String,
+    pub stderr: String,
+    pub duration_ms: u64,
 }
 
 /// Git 分支信息

@@ -85,9 +85,10 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted, defineAsyncComponent } from 'vue';
+import { ref, computed, onMounted, onUnmounted, defineAsyncComponent } from 'vue';
 import { Plus, Settings, ChevronDown, FolderPlus, PanelLeftOpen, PanelLeftClose } from 'lucide-vue-next';
 import { useAppStore } from '../stores/appStore';
+import { useProjectStatus } from '../composables/useProjectStatus';
 import GroupTree from '../components/Sidebar/GroupTree.vue';
 import OperationQueue from '../components/OperationPanel/OperationQueue.vue';
 import Button from '../components/ui/Button.vue';
@@ -105,6 +106,7 @@ const SettingsModal = defineAsyncComponent(
 );
 
 const appStore = useAppStore();
+const { getStatus, startPolling, stopPolling, watchRepoChanges } = useProjectStatus();
 
 const showAddModal = ref(false);
 const showBatchImportModal = ref(false);
@@ -129,6 +131,13 @@ function setSidebarWidth(width: number) {
 onMounted(async () => {
   await appStore.loadConfig();
 
+  // 实时状态：监听后端 repo:changed + 低频轮询兜底
+  await watchRepoChanges();
+  startPolling(60_000);
+  appStore.projects.forEach((project) => {
+    void getStatus(project.id, false);
+  });
+
   let width = DEFAULT_WIDTH;
   const savedWidth = localStorage.getItem(SIDEBAR_WIDTH_KEY);
   if (savedWidth) {
@@ -143,6 +152,10 @@ onMounted(async () => {
   if (savedCollapsed) {
     sidebarCollapsed.value = savedCollapsed === 'true';
   }
+});
+
+onUnmounted(() => {
+  stopPolling();
 });
 
 function toggleSidebar() {

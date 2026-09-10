@@ -67,6 +67,8 @@ export interface GitResult {
 
 export interface OperationEvent {
   task_id: string;
+  /** 关联项目 ID，用于匹配任务行 */
+  project_id: string;
   status: string;
   message: string | null;
 }
@@ -79,6 +81,15 @@ export interface OperationTask {
   status: 'pending' | 'running' | 'success' | 'error';
   message?: string;
   createdAt: number;
+}
+
+/** 带项目 ID 的批量 Git 结果 */
+export interface ProjectGitResult {
+  project_id: string;
+  success: boolean;
+  stdout: string;
+  stderr: string;
+  duration_ms: number;
 }
 
 /** Git 分支 */

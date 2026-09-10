@@ -6,7 +6,7 @@ import type {
   AppConfig,
   Project,
   Group,
-  GitResult,
+  ProjectGitResult,
   ProjectStatus,
   Branch,
   Commit,
@@ -138,24 +138,24 @@ export async function getProjectStatus(
  * 批量 Pull 操作
  * @param projectIds 项目 ID 列表
  */
-export async function batchPull(projectIds: string[]): Promise<GitResult[]> {
-  return invoke<GitResult[]>('batch_pull', { projectIds });
+export async function batchPull(projectIds: string[]): Promise<ProjectGitResult[]> {
+  return invoke<ProjectGitResult[]>('batch_pull', { projectIds });
 }
 
 /**
  * 批量 Fetch 操作
  * @param projectIds 项目 ID 列表
  */
-export async function batchFetch(projectIds: string[]): Promise<GitResult[]> {
-  return invoke<GitResult[]>('batch_fetch', { projectIds });
+export async function batchFetch(projectIds: string[]): Promise<ProjectGitResult[]> {
+  return invoke<ProjectGitResult[]>('batch_fetch', { projectIds });
 }
 
 /**
  * 批量 Push 操作
  * @param projectIds 项目 ID 列表
  */
-export async function batchPush(projectIds: string[]): Promise<GitResult[]> {
-  return invoke<GitResult[]>('batch_push', { projectIds });
+export async function batchPush(projectIds: string[]): Promise<ProjectGitResult[]> {
+  return invoke<ProjectGitResult[]>('batch_push', { projectIds });
 }
 
 /**

@@ -3,7 +3,6 @@
 
 use crate::models::{ChangedFile, GitResult, ProjectStatus};
 use parking_lot::Mutex;
-use std::collections::HashMap;
 use std::sync::Arc;
 use std::time::Instant;
 use tokio::process::Command;
@@ -16,27 +15,34 @@ use std::os::windows::process::CommandExt;
 /// 支持并发控制和超时机制
 pub struct GitExecutor {
     /// 并发信号量，限制同时执行的 Git 命令数量
-    semaphore: Arc<Semaphore>,
+    semaphore: Mutex<Arc<Semaphore>>,
     /// 自定义 Git 可执行文件路径
     git_path: Mutex<Option<String>>,
 }
 
 impl GitExecutor {
     /// 创建新的 Git 执行器
-    /// 
+    ///
     /// # Arguments
     /// * `max_concurrent` - 最大并发数
     pub fn new(max_concurrent: usize) -> Self {
         Self {
-            semaphore: Arc::new(Semaphore::new(max_concurrent)),
+            semaphore: Mutex::new(Arc::new(Semaphore::new(max_concurrent.max(1)))),
             git_path: Mutex::new(None),
         }
     }
 
-    /// 设置 Git 可执行文件路径
-    pub fn set_git_path(&self, path: String) {
+    /// 设置 Git 可执行文件路径（None 表示回退到 PATH 中的 git）
+    pub fn set_git_path(&self, path: Option<String>) {
         let mut git_path = self.git_path.lock();
-        *git_path = Some(path);
+        *git_path = path;
+    }
+
+    /// 更新最大并发数（替换信号量；进行中的命令仍受旧限制约束）
+    pub fn set_max_concurrent(&self, max_concurrent: usize) {
+        let max_concurrent = max_concurrent.max(1);
+        let mut sem = self.semaphore.lock();
+        *sem = Arc::new(Semaphore::new(max_concurrent));
     }
 
     /// 执行 Git 命令
@@ -48,8 +54,9 @@ impl GitExecutor {
     /// # Returns
     /// GitResult - 执行结果
     pub async fn exec(&self, repo_path: &str, args: &[&str]) -> GitResult {
-        // 获取信号量许可，限制并发
-        let _permit = self.semaphore.acquire().await.unwrap();
+        // 获取信号量许可，限制并发（克隆 Arc，避免跨 await 持锁）
+        let semaphore = self.semaphore.lock().clone();
+        let _permit = semaphore.acquire().await.unwrap();
         
         let start = Instant::now();
         let mut cmd = self.create_command(repo_path);
@@ -289,47 +296,5 @@ impl GitExecutor {
         cmd.env("GIT_SSH_COMMAND", "ssh -o BatchMode=yes");
 
         cmd
-    }
-}
-
-/// 状态缓存（带 TTL）
-pub struct StatusCache {
-    cache: Mutex<HashMap<String, (ProjectStatus, std::time::Instant)>>,
-    ttl: std::time::Duration,
-}
-
-impl StatusCache {
-    /// 创建新的状态缓存
-    /// 
-    /// # Arguments
-    /// * `ttl_seconds` - 缓存有效期（秒）
-    pub fn new(ttl_seconds: u64) -> Self {
-        Self {
-            cache: Mutex::new(HashMap::new()),
-            ttl: std::time::Duration::from_secs(ttl_seconds),
-        }
-    }
-
-    /// 获取缓存的状态
-    pub fn get(&self, project_id: &str) -> Option<ProjectStatus> {
-        let cache = self.cache.lock();
-        if let Some((status, timestamp)) = cache.get(project_id) {
-            if timestamp.elapsed() < self.ttl {
-                return Some(status.clone());
-            }
-        }
-        None
-    }
-
-    /// 设置缓存
-    pub fn set(&self, project_id: String, status: ProjectStatus) {
-        let mut cache = self.cache.lock();
-        cache.insert(project_id, (status, std::time::Instant::now()));
-    }
-
-    /// 使缓存失效
-    pub fn invalidate(&self, project_id: &str) {
-        let mut cache = self.cache.lock();
-        cache.remove(project_id);
     }
 }

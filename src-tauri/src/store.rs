@@ -175,7 +175,7 @@ impl AppState {
                 auto_fetch_interval: 30,
                 max_concurrent_git: 3,
                 theme: "system".to_string(),
-                global_shortcut: "CmdOrControl+Shift+G".to_string(),
+                global_shortcut: "CommandOrControl+Shift+G".to_string(),
                 scan_blacklist: default_scan_blacklist(),
             },
         }

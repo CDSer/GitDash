@@ -3,8 +3,8 @@
 
 use crate::models::{
     AppConfig, BatchImportResult, Branch, Commit, CommitDetail, CommitFile, DiscardEntry,
-    FileNode, GitCommitResult, GitDiffContentResult, GitResult, Group, OperationEvent, Project,
-    ProjectStatus, ScanOptions, ScannedRepo, Settings,
+    FileNode, GitCommitResult, GitDiffContentResult, Group, OperationEvent, Project,
+    ProjectGitResult, ProjectStatus, ScanOptions, ScannedRepo, Settings,
 };
 use crate::git::GitExecutor;
 use crate::scanner::ProjectScanner;
@@ -25,13 +25,51 @@ pub async fn get_config(state: State<'_, AppState>) -> Result<AppConfig, String>
 pub async fn update_settings(
     settings: Settings,
     state: State<'_, AppState>,
+    app_handle: tauri::AppHandle,
 ) -> Result<(), String> {
     {
         let mut config = state.config.write();
         config.settings = settings.clone();
         save_config(&config, &state.cache)?;
     }
+    apply_runtime_settings(&app_handle, &state, &settings);
     Ok(())
+}
+
+/// 将设置应用到运行时（Git 路径、并发数、全局快捷键）
+pub fn apply_runtime_settings(
+    app_handle: &tauri::AppHandle,
+    state: &AppState,
+    settings: &Settings,
+) {
+    state.git.set_git_path(settings.git_path.clone());
+    state.git
+        .set_max_concurrent(settings.max_concurrent_git.max(1));
+    apply_global_shortcut(app_handle, &settings.global_shortcut);
+}
+
+/// 注册/替换全局快捷键（显示主窗口）
+fn apply_global_shortcut(app_handle: &tauri::AppHandle, combo: &str) -> bool {
+    use tauri_plugin_global_shortcut::GlobalShortcutExt;
+
+    let _ = app_handle.global_shortcut().unregister_all();
+
+    let combo = combo.trim();
+    if combo.is_empty() {
+        return true;
+    }
+
+    let normalized = combo
+        .replace("CmdOrControl+", "CommandOrControl+")
+        .replace("cmdorcontrol+", "CommandOrControl+");
+
+    match app_handle.global_shortcut().register(normalized.as_str()) {
+        Ok(_) => true,
+        Err(e) => {
+            eprintln!("无法注册全局快捷键「{}」：{}", combo, e);
+            false
+        }
+    }
 }
 
 /// 添加新项目
@@ -702,178 +740,245 @@ pub async fn get_commit_detail(
     })
 }
 
-/// 批量 Pull
+/// 解析一批项目（保持 config 顺序，但结果均携带 project_id）
+fn resolve_projects(state: &AppState, project_ids: &[String]) -> Vec<Project> {
+    let id_set: std::collections::HashSet<&str> = project_ids.iter().map(|s| s.as_str()).collect();
+    let config = state.config.read();
+    config
+        .projects
+        .iter()
+        .filter(|p| id_set.contains(p.id.as_str()))
+        .cloned()
+        .collect()
+}
+
+/// 串行等待 JoinSet 并汇总为 ProjectGitResult
+async fn collect_git_results(
+    mut set: tokio::task::JoinSet<ProjectGitResult>,
+) -> Vec<ProjectGitResult> {
+    let mut results = Vec::with_capacity(set.len());
+    while let Some(joined) = set.join_next().await {
+        if let Ok(item) = joined {
+            results.push(item);
+        }
+    }
+    results
+}
+
+/// 批量 Pull（并行，受 GitExecutor 并发上限约束）
 #[tauri::command]
 pub async fn batch_pull(
     project_ids: Vec<String>,
     state: State<'_, AppState>,
     window: WebviewWindow,
-) -> Result<Vec<GitResult>, String> {
-    let projects: Vec<_> = {
-        let config = state.config.read();
-        config.projects
-            .iter()
-            .filter(|p| project_ids.contains(&p.id))
-            .cloned()
-            .collect()
-    };
+) -> Result<Vec<ProjectGitResult>, String> {
+    let projects = resolve_projects(&state, &project_ids);
+    let git = state.git.clone();
+    let cache = state.cache.clone();
+    let mut set = tokio::task::JoinSet::new();
 
-    let mut results = Vec::new();
+    for project in projects {
+        let git = git.clone();
+        let cache = cache.clone();
+        let window = window.clone();
+        set.spawn(async move {
+            let task_id = Uuid::new_v4().to_string();
+            let _ = window.emit(
+                "git:progress",
+                OperationEvent {
+                    task_id: task_id.clone(),
+                    project_id: project.id.clone(),
+                    status: "running".to_string(),
+                    message: Some(format!("正在拉取 {}...", project.name)),
+                },
+            );
 
-    for project in &projects {
-        let task_id = Uuid::new_v4().to_string();
-        
-        let _ = window.emit("git:progress", OperationEvent {
-            task_id: task_id.clone(),
-            status: "running".to_string(),
-            message: Some(format!("正在拉取 {}...", project.name)),
-        });
+            let result = git.exec(&project.path, &["pull", "--no-edit"]).await;
+            cache.invalidate(&project.id);
 
-        let result = state.git.exec(&project.path, &["pull", "--no-edit"]).await;
-        results.push(result.clone());
-
-        let status = if result.success {
-            "success"
-        } else {
-            "error"
-        };
-
-        let _ = window.emit("git:progress", OperationEvent {
-            task_id,
-            status: status.to_string(),
-            message: Some(if result.success {
-                format!("成功拉取 {}", project.name)
+            let status = if result.success {
+                "success"
             } else {
-                format!("拉取 {} 失败：{}", project.name, result.stderr)
-            }),
+                "error"
+            };
+            let _ = window.emit(
+                "git:progress",
+                OperationEvent {
+                    task_id,
+                    project_id: project.id.clone(),
+                    status: status.to_string(),
+                    message: Some(if result.success {
+                        format!("成功拉取 {}", project.name)
+                    } else {
+                        format!("拉取 {} 失败：{}", project.name, result.stderr)
+                    }),
+                },
+            );
+
+            ProjectGitResult {
+                project_id: project.id,
+                success: result.success,
+                stdout: result.stdout,
+                stderr: result.stderr,
+                duration_ms: result.duration_ms,
+            }
         });
     }
 
-    Ok(results)
+    Ok(collect_git_results(set).await)
 }
 
-/// 批量 Fetch
+/// 批量 Fetch（并行）
 #[tauri::command]
 pub async fn batch_fetch(
     project_ids: Vec<String>,
     state: State<'_, AppState>,
     window: WebviewWindow,
-) -> Result<Vec<GitResult>, String> {
-    let projects: Vec<_> = {
-        let config = state.config.read();
-        config.projects
-            .iter()
-            .filter(|p| project_ids.contains(&p.id))
-            .cloned()
-            .collect()
-    };
+) -> Result<Vec<ProjectGitResult>, String> {
+    let projects = resolve_projects(&state, &project_ids);
+    let git = state.git.clone();
+    let cache = state.cache.clone();
+    let mut set = tokio::task::JoinSet::new();
 
-    let mut results = Vec::new();
+    for project in projects {
+        let git = git.clone();
+        let cache = cache.clone();
+        let window = window.clone();
+        set.spawn(async move {
+            let task_id = Uuid::new_v4().to_string();
+            let _ = window.emit(
+                "git:progress",
+                OperationEvent {
+                    task_id: task_id.clone(),
+                    project_id: project.id.clone(),
+                    status: "running".to_string(),
+                    message: Some(format!("正在获取 {}...", project.name)),
+                },
+            );
 
-    for project in &projects {
-        let task_id = Uuid::new_v4().to_string();
-        
-        let _ = window.emit("git:progress", OperationEvent {
-            task_id: task_id.clone(),
-            status: "running".to_string(),
-            message: Some(format!("正在获取 {}...", project.name)),
-        });
+            let result = git.exec(&project.path, &["fetch", "--prune", "--all"]).await;
+            cache.invalidate(&project.id);
 
-        let result = state.git.exec(&project.path, &["fetch", "--prune", "--all"]).await;
-        results.push(result.clone());
-
-        let status = if result.success {
-            "success"
-        } else {
-            "error"
-        };
-
-        let _ = window.emit("git:progress", OperationEvent {
-            task_id,
-            status: status.to_string(),
-            message: Some(if result.success {
-                format!("成功获取 {}", project.name)
+            let status = if result.success {
+                "success"
             } else {
-                format!("获取 {} 失败：{}", project.name, result.stderr)
-            }),
+                "error"
+            };
+            let _ = window.emit(
+                "git:progress",
+                OperationEvent {
+                    task_id,
+                    project_id: project.id.clone(),
+                    status: status.to_string(),
+                    message: Some(if result.success {
+                        format!("成功获取 {}", project.name)
+                    } else {
+                        format!("获取 {} 失败：{}", project.name, result.stderr)
+                    }),
+                },
+            );
+
+            ProjectGitResult {
+                project_id: project.id,
+                success: result.success,
+                stdout: result.stdout,
+                stderr: result.stderr,
+                duration_ms: result.duration_ms,
+            }
         });
     }
 
-    Ok(results)
+    Ok(collect_git_results(set).await)
 }
 
-/// 批量 Push
+/// 批量 Push（并行）
 #[tauri::command]
 pub async fn batch_push(
     project_ids: Vec<String>,
     state: State<'_, AppState>,
     window: WebviewWindow,
-) -> Result<Vec<GitResult>, String> {
-    let projects: Vec<_> = {
-        let config = state.config.read();
-        config.projects
-            .iter()
-            .filter(|p| project_ids.contains(&p.id))
-            .cloned()
-            .collect()
-    };
+) -> Result<Vec<ProjectGitResult>, String> {
+    let projects = resolve_projects(&state, &project_ids);
+    let git = state.git.clone();
+    let cache = state.cache.clone();
+    let mut set = tokio::task::JoinSet::new();
 
-    let mut results = Vec::new();
+    for project in projects {
+        let git = git.clone();
+        let cache = cache.clone();
+        let window = window.clone();
+        set.spawn(async move {
+            let task_id = Uuid::new_v4().to_string();
+            let _ = window.emit(
+                "git:progress",
+                OperationEvent {
+                    task_id: task_id.clone(),
+                    project_id: project.id.clone(),
+                    status: "running".to_string(),
+                    message: Some(format!("正在推送 {}...", project.name)),
+                },
+            );
 
-    for project in &projects {
-        let task_id = Uuid::new_v4().to_string();
+            // 无上游分支时直接报错，避免 git 交互式提示卡死
+            let upstream = git
+                .exec(
+                    &project.path,
+                    &["rev-parse", "--abbrev-ref", "--symbolic-full-name", "@{u}"],
+                )
+                .await;
+            if !upstream.success || upstream.stdout.trim().is_empty() {
+                let msg = "当前分支尚未设置上游分支，无法推送".to_string();
+                let _ = window.emit(
+                    "git:progress",
+                    OperationEvent {
+                        task_id,
+                        project_id: project.id.clone(),
+                        status: "error".to_string(),
+                        message: Some(format!("推送 {} 失败：{}", project.name, msg)),
+                    },
+                );
+                return ProjectGitResult {
+                    project_id: project.id,
+                    success: false,
+                    stdout: String::new(),
+                    stderr: msg,
+                    duration_ms: 0,
+                };
+            }
 
-        let _ = window.emit("git:progress", OperationEvent {
-            task_id: task_id.clone(),
-            status: "running".to_string(),
-            message: Some(format!("正在推送 {}...", project.name)),
-        });
+            let result = git.exec(&project.path, &["push"]).await;
+            cache.invalidate(&project.id);
 
-        // 无上游分支时直接报错，避免 git 交互式提示卡死
-        let upstream = state
-            .git
-            .exec(
-                &project.path,
-                &["rev-parse", "--abbrev-ref", "--symbolic-full-name", "@{u}"],
-            )
-            .await;
-        if !upstream.success || upstream.stdout.trim().is_empty() {
-            let msg = "当前分支尚未设置上游分支，无法推送".to_string();
-            results.push(GitResult {
-                success: false,
-                stdout: String::new(),
-                stderr: msg.clone(),
-                duration_ms: 0,
-            });
-            let _ = window.emit("git:progress", OperationEvent {
-                task_id,
-                status: "error".to_string(),
-                message: Some(format!("推送 {} 失败：{}", project.name, msg)),
-            });
-            continue;
-        }
-
-        let result = state.git.exec(&project.path, &["push"]).await;
-        results.push(result.clone());
-
-        let status = if result.success {
-            "success"
-        } else {
-            "error"
-        };
-
-        let _ = window.emit("git:progress", OperationEvent {
-            task_id,
-            status: status.to_string(),
-            message: Some(if result.success {
-                format!("成功推送 {}", project.name)
+            let status = if result.success {
+                "success"
             } else {
-                format!("推送 {} 失败：{}", project.name, result.stderr)
-            }),
+                "error"
+            };
+            let _ = window.emit(
+                "git:progress",
+                OperationEvent {
+                    task_id,
+                    project_id: project.id.clone(),
+                    status: status.to_string(),
+                    message: Some(if result.success {
+                        format!("成功推送 {}", project.name)
+                    } else {
+                        format!("推送 {} 失败：{}", project.name, result.stderr)
+                    }),
+                },
+            );
+
+            ProjectGitResult {
+                project_id: project.id,
+                success: result.success,
+                stdout: result.stdout,
+                stderr: result.stderr,
+                duration_ms: result.duration_ms,
+            }
         });
     }
 
-    Ok(results)
+    Ok(collect_git_results(set).await)
 }
 
 /// 校验 SHA 是否为合法的十六进制提交哈希（长度 1~64）

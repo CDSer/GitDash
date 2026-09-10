@@ -4,7 +4,7 @@
 import { defineStore } from 'pinia';
 import { ref } from 'vue';
 import { listen } from '@tauri-apps/api/event';
-import type { OperationTask, OperationEvent } from '../types';
+import type { OperationTask, OperationEvent, ProjectGitResult } from '../types';
 import { batchPull as batchPullApi, batchFetch as batchFetchApi, batchPush as batchPushApi } from '../lib/tauriApi';
 import { useAppStore } from './appStore';
 
@@ -46,170 +46,106 @@ export const useOperationStore = defineStore('operation', () => {
     }
   }
 
+  /**
+   * 按 projectId 更新任务（进度事件与后端结果均带 project_id）
+   */
+  function updateTaskByProject(projectId: string, updates: Partial<OperationTask>) {
+    const task = tasks.value.find(t => t.projectId === projectId);
+    if (task) {
+      Object.assign(task, updates);
+    }
+  }
+
+  /**
+   * 统一批量操作流程：建任务 → 监听进度 → 并行结果回写
+   */
+  async function runBatch(
+    projectIds: string[],
+    operation: 'pull' | 'push' | 'fetch',
+    api: (ids: string[]) => Promise<ProjectGitResult[]>
+  ) {
+    if (projectIds.length === 0) return;
+
+    const appStore = useAppStore();
+    const projectMap = new Map(appStore.projects.map(p => [p.id, p]));
+
+    // 创建任务列表（按 project_id 匹配）
+    projectIds.forEach(id => {
+      const project = projectMap.get(id);
+      if (project) {
+        createTask(id, project.name, operation);
+      }
+    });
+
+    showPanel.value = true;
+    isQueueRunning.value = true;
+
+    let unlisten: (() => void) | null = null;
+    try {
+      // 监听进度事件：用 project_id 对齐任务行
+      unlisten = await listen<OperationEvent>('git:progress', (event) => {
+        const { project_id, status, message } = event.payload;
+        if (tasks.value.some(t => t.projectId === project_id)) {
+          updateTaskByProject(project_id, {
+            status: status as OperationTask['status'],
+            message: message || undefined,
+          });
+        }
+      });
+
+      const results = await api(projectIds);
+
+      // 以 project_id 回写真实结果（后端返回顺序与传入顺序无关）
+      results.forEach(r => {
+        updateTaskByProject(r.project_id, {
+          status: r.success ? 'success' : 'error',
+          message: r.success ? undefined : r.stderr,
+        });
+      });
+
+      // 未返回的 id 标记失败，避免一直 pending
+      projectIds.forEach(id => {
+        const t = tasks.value.find(x => x.projectId === id);
+        if (t && t.status === 'pending') {
+          updateTask(t.id, { status: 'error', message: '未收到执行结果' });
+        }
+      });
+
+      isQueueRunning.value = false;
+    } catch (error) {
+      console.error('批量操作失败：', error);
+      projectIds.forEach(id => {
+        updateTaskByProject(id, { status: 'error', message: String(error) });
+      });
+      isQueueRunning.value = false;
+    } finally {
+      if (unlisten) {
+        unlisten();
+      }
+    }
+  }
+
   // ========== Actions ==========
 
   /**
    * 批量 Pull 操作
-   * @param projectIds 项目 ID 列表
    */
   async function batchPull(projectIds: string[]) {
-    const appStore = useAppStore();
-    const projectMap = new Map(appStore.projects.map(p => [p.id, p]));
-
-    // 创建任务列表
-    const taskIds: string[] = [];
-    projectIds.forEach(id => {
-      const project = projectMap.get(id);
-      if (project) {
-        const task = createTask(id, project.name, 'pull');
-        taskIds.push(task.id);
-      }
-    });
-
-    showPanel.value = true;
-    isQueueRunning.value = true;
-
-    try {
-      // 监听进度事件
-      const unlisten = await listen<OperationEvent>('git:progress', (event) => {
-        const task = tasks.value.find(t => t.id === event.payload.task_id);
-        if (task) {
-          updateTask(event.payload.task_id, {
-            status: event.payload.status as OperationTask['status'],
-            message: event.payload.message || undefined,
-          });
-        }
-      });
-
-      // 执行 Pull
-      const results = await batchPullApi(projectIds);
-
-      // 以命令真实返回结果覆盖任务状态
-      results.forEach((r, i) => {
-        const tid = taskIds[i];
-        if (tid) {
-          updateTask(tid, {
-            status: r.success ? 'success' : 'error',
-            message: r.success ? undefined : r.stderr,
-          });
-        }
-      });
-
-      setTimeout(() => {
-        unlisten();
-        isQueueRunning.value = false;
-      }, 1000);
-    } catch (error) {
-      console.error('批量拉取失败：', error);
-      taskIds.forEach(id => {
-        updateTask(id, { status: 'error', message: String(error) });
-      });
-      isQueueRunning.value = false;
-    }
+    await runBatch(projectIds, 'pull', batchPullApi);
   }
 
   /**
    * 批量 Fetch 操作
-   * @param projectIds 项目 ID 列表
    */
   async function batchFetch(projectIds: string[]) {
-    const appStore = useAppStore();
-    const projectMap = new Map(appStore.projects.map(p => [p.id, p]));
-
-    // 创建任务列表
-    const taskIds: string[] = [];
-    projectIds.forEach(id => {
-      const project = projectMap.get(id);
-      if (project) {
-        const task = createTask(id, project.name, 'fetch');
-        taskIds.push(task.id);
-      }
-    });
-
-    showPanel.value = true;
-    isQueueRunning.value = true;
-
-    try {
-      const results = await batchFetchApi(projectIds);
-
-      results.forEach((r, i) => {
-        const tid = taskIds[i];
-        if (tid) {
-          updateTask(tid, {
-            status: r.success ? 'success' : 'error',
-            message: r.success ? undefined : r.stderr,
-          });
-        }
-      });
-
-      isQueueRunning.value = false;
-    } catch (error) {
-      console.error('批量获取失败：', error);
-      taskIds.forEach(id => {
-        updateTask(id, { status: 'error', message: String(error) });
-      });
-      isQueueRunning.value = false;
-    }
+    await runBatch(projectIds, 'fetch', batchFetchApi);
   }
 
   /**
    * 批量 Push 操作
-   * @param projectIds 项目 ID 列表
    */
   async function batchPush(projectIds: string[]) {
-    const appStore = useAppStore();
-    const projectMap = new Map(appStore.projects.map(p => [p.id, p]));
-
-    // 创建任务列表
-    const taskIds: string[] = [];
-    projectIds.forEach(id => {
-      const project = projectMap.get(id);
-      if (project) {
-        const task = createTask(id, project.name, 'push');
-        taskIds.push(task.id);
-      }
-    });
-
-    showPanel.value = true;
-    isQueueRunning.value = true;
-
-    try {
-      // 监听进度事件
-      const unlisten = await listen<OperationEvent>('git:progress', (event) => {
-        const task = tasks.value.find(t => t.id === event.payload.task_id);
-        if (task) {
-          updateTask(event.payload.task_id, {
-            status: event.payload.status as OperationTask['status'],
-            message: event.payload.message || undefined,
-          });
-        }
-      });
-
-      // 执行 Push
-      const results = await batchPushApi(projectIds);
-
-      // 以命令真实返回结果覆盖任务状态
-      results.forEach((r, i) => {
-        const tid = taskIds[i];
-        if (tid) {
-          updateTask(tid, {
-            status: r.success ? 'success' : 'error',
-            message: r.success ? undefined : r.stderr,
-          });
-        }
-      });
-
-      setTimeout(() => {
-        unlisten();
-        isQueueRunning.value = false;
-      }, 1000);
-    } catch (error) {
-      console.error('批量推送失败：', error);
-      taskIds.forEach(id => {
-        updateTask(id, { status: 'error', message: String(error) });
-      });
-      isQueueRunning.value = false;
-    }
+    await runBatch(projectIds, 'push', batchPushApi);
   }
 
   /**
