@@ -65,6 +65,7 @@
         stroke-width="2"
         :data-id="r.row.id"
         class="git-dot"
+        :class="{ 'git-dot--unpushed': isUnpushed(r.row.id) }"
       />
       <text
         v-if="r.overflow"
@@ -106,6 +107,13 @@ interface RenderEdge {
 
 const layout = computed(() => layoutGraph(props.commits));
 const rows = computed(() => layout.value.rows);
+const unpushedIds = computed(
+  () => new Set(props.commits.filter((c) => c.is_pushed === false).map((c) => c.id)),
+);
+
+function isUnpushed(id: string): boolean {
+  return unpushedIds.value.has(id);
+}
 
 const maxLaneCount = computed(() =>
   rows.value.reduce((m, r) => Math.max(m, r.laneCount), 1),
@@ -181,6 +189,10 @@ function onClick(e: MouseEvent) {
 
 .git-dot:hover {
   stroke-width: 3;
+}
+
+.git-dot--unpushed {
+  stroke-dasharray: 3 2;
 }
 
 .git-overflow {

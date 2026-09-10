@@ -5,6 +5,7 @@
 <template>
   <div class="flex h-full flex-col overflow-hidden">
     <header
+      v-if="!embedded"
       class="flex h-12 shrink-0 items-center justify-between border-b border-border bg-card px-4"
     >
       <div class="flex min-w-0 items-center gap-2">
@@ -26,6 +27,17 @@
         </Button>
       </div>
     </header>
+
+    <div v-else class="flex h-9 shrink-0 items-center justify-end border-b border-border bg-card px-2">
+      <Button
+        variant="ghost"
+        size="sm"
+        :class="showGitPanel ? 'text-primary' : ''"
+        @click="showGitPanel = !showGitPanel"
+      >
+        <GitBranch :size="14" /> Git 图
+      </Button>
+    </div>
 
     <div class="flex min-h-0 flex-1">
       <aside class="w-[260px] shrink-0 flex flex-col overflow-hidden border-r border-border bg-card">
@@ -89,10 +101,11 @@
 </template>
 
 <script setup lang="ts">
-import { computed, ref } from 'vue';
-import { useRouter } from 'vue-router';
+import { computed, ref, watch } from 'vue';
+import { useRoute } from 'vue-router';
 import { ArrowLeft, GitBranch, X } from 'lucide-vue-next';
 import { useAppStore } from '../stores/appStore';
+import { useTabStore } from '../stores/tabStore';
 import FileTree from '../components/Explorer/FileTree.vue';
 import CodeEditor from '../components/Editor/CodeEditor.vue';
 import GitGraphPanel from '../components/Git/GitGraphPanel.vue';
@@ -104,10 +117,13 @@ import { toast } from '../lib/toast';
 
 const props = defineProps<{
   projectId: string;
+  /** 标签页嵌入：隐藏页头「返回」 */
+  embedded?: boolean;
 }>();
 
 const appStore = useAppStore();
-const router = useRouter();
+const tabStore = useTabStore();
+const route = useRoute();
 
 const project = computed(() => appStore.projects.find((p) => p.id === props.projectId) ?? null);
 
@@ -129,8 +145,26 @@ function basename(p: string) {
   return p.split(/[\\/]/).pop() || p;
 }
 
-function langOf(p: string) {
-  const parts = p.split('.');
+function langOf(p: string): string {
+  const name = p.split(/[\\/]/).pop() ?? p;
+  const lower = name.toLowerCase();
+
+  // 特殊文件名
+  if (lower === 'dockerfile' || lower.startsWith('dockerfile.')) return 'dockerfile';
+  if (lower === 'makefile' || lower === 'gnumakefile' || lower === 'cmakelists.txt') {
+    return lower === 'cmakelists.txt' ? 'cmake' : 'makefile';
+  }
+  if (lower === 'gemfile' || lower === 'rakefile') return 'ruby';
+  if (lower === 'package.json' || lower.endsWith('package.json')) return 'json';
+  if (lower === 'tsconfig.json' || lower.endsWith('.jsonc')) return 'json';
+  if (lower === '.gitignore' || lower === '.dockerignore' || lower === '.npmrc') {
+    return 'properties';
+  }
+  if (lower.startsWith('.env')) return 'env';
+  if (lower.endsWith('.d.ts')) return 'dts';
+  if (lower.endsWith('.blade.php')) return 'php';
+
+  const parts = name.split('.');
   return parts.length > 1 ? parts.pop()!.toLowerCase() : '';
 }
 
@@ -162,6 +196,17 @@ async function onOpenFile(path: string) {
   }
 }
 
+// 支持从 SCM「编辑」跳转：/workspace/:id?file=rel/path
+watch(
+  () => [project.value, route.query.file] as const,
+  ([proj, file]) => {
+    if (!proj || typeof file !== 'string' || !file) return;
+    const abs = `${proj.path.replace(/\/$/, '')}/${file}`;
+    void onOpenFile(abs);
+  },
+  { immediate: true },
+);
+
 function updateContent(value: string) {
   const tab = activeTab.value;
   if (tab) tab.content = value;
@@ -189,6 +234,6 @@ function closeTab(path: string) {
 }
 
 function backToProjects() {
-  router.push({ name: 'projects' });
+  tabStore.openProjectsTab();
 }
 </script>

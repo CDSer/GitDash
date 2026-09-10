@@ -2,9 +2,10 @@
 // 定义所有暴露给前端的 Rust 命令
 
 use crate::models::{
-    AppConfig, BatchImportResult, Branch, Commit, CommitDetail, CommitFile, DiscardEntry,
-    FileNode, GitCommitResult, GitDiffContentResult, GitResult, Group, OperationEvent, Project,
-    ProjectStatus, ScanOptions, ScannedRepo, Settings,
+    AppConfig, BatchImportResult, Branch, Commit, CommitDetail, CommitFile, ConflictFileContent,
+    ConflictSide, DiscardEntry, FileNode, GitCommitResult, GitDiffContentResult, Group,
+    InProgressOp, MergeResult, OperationEvent, Project, ProjectGitResult, ProjectStatus,
+    ScanOptions, ScannedRepo, Settings,
 };
 use crate::git::GitExecutor;
 use crate::scanner::ProjectScanner;
@@ -25,13 +26,51 @@ pub async fn get_config(state: State<'_, AppState>) -> Result<AppConfig, String>
 pub async fn update_settings(
     settings: Settings,
     state: State<'_, AppState>,
+    app_handle: tauri::AppHandle,
 ) -> Result<(), String> {
     {
         let mut config = state.config.write();
         config.settings = settings.clone();
         save_config(&config, &state.cache)?;
     }
+    apply_runtime_settings(&app_handle, &state, &settings);
     Ok(())
+}
+
+/// 将设置应用到运行时（Git 路径、并发数、全局快捷键）
+pub fn apply_runtime_settings(
+    app_handle: &tauri::AppHandle,
+    state: &AppState,
+    settings: &Settings,
+) {
+    state.git.set_git_path(settings.git_path.clone());
+    state.git
+        .set_max_concurrent(settings.max_concurrent_git.max(1));
+    apply_global_shortcut(app_handle, &settings.global_shortcut);
+}
+
+/// 注册/替换全局快捷键（显示主窗口）
+fn apply_global_shortcut(app_handle: &tauri::AppHandle, combo: &str) -> bool {
+    use tauri_plugin_global_shortcut::GlobalShortcutExt;
+
+    let _ = app_handle.global_shortcut().unregister_all();
+
+    let combo = combo.trim();
+    if combo.is_empty() {
+        return true;
+    }
+
+    let normalized = combo
+        .replace("CmdOrControl+", "CommandOrControl+")
+        .replace("cmdorcontrol+", "CommandOrControl+");
+
+    match app_handle.global_shortcut().register(normalized.as_str()) {
+        Ok(_) => true,
+        Err(e) => {
+            eprintln!("无法注册全局快捷键「{}」：{}", combo, e);
+            false
+        }
+    }
 }
 
 /// 添加新项目
@@ -624,10 +663,75 @@ pub async fn get_commits(
             email,
             date,
             parents,
+            is_pushed: true,
         });
     }
 
+    mark_unpushed(&state.git, &project.path, &branch, &mut commits).await;
+
     Ok(commits)
+}
+
+/// 用上游分支标记未推送提交（无上游则不改）
+async fn mark_unpushed(
+    git: &GitExecutor,
+    path: &str,
+    branch: &str,
+    commits: &mut [Commit],
+) {
+    if commits.is_empty() {
+        return;
+    }
+
+    // 远程分支上的提交本身已在远端
+    let symbolic = git
+        .exec(path, &["rev-parse", "--symbolic-full-name", branch])
+        .await;
+    if symbolic.success {
+        let refname = symbolic.stdout.trim();
+        if refname.starts_with("refs/remotes/") {
+            return;
+        }
+    }
+
+    let upstream = format!("{branch}@{{upstream}}");
+    let up = git
+        .exec(
+            path,
+            &["rev-parse", "--abbrev-ref", "--symbolic-full-name", &upstream],
+        )
+        .await;
+    if !up.success {
+        return;
+    }
+    let up_name = up.stdout.trim();
+    if up_name.is_empty() || up_name == branch {
+        return;
+    }
+
+    // upstream..branch = 本地有、上游没有 → 未推送
+    let revs = git
+        .exec(path, &["rev-list", &format!("{up_name}..{branch}")])
+        .await;
+    if !revs.success {
+        return;
+    }
+
+    let unpushed: std::collections::HashSet<&str> = revs
+        .stdout
+        .lines()
+        .map(|l| l.trim())
+        .filter(|l| !l.is_empty())
+        .collect();
+    if unpushed.is_empty() {
+        return;
+    }
+
+    for c in commits.iter_mut() {
+        if unpushed.contains(c.id.as_str()) {
+            c.is_pushed = false;
+        }
+    }
 }
 
 /// 获取单次提交详情（含完整 message 和改动文件列表）
@@ -696,184 +800,252 @@ pub async fn get_commit_detail(
             email,
             date,
             parents,
+            is_pushed: true,
         },
         body,
         files,
     })
 }
 
-/// 批量 Pull
+/// 解析一批项目（保持 config 顺序，但结果均携带 project_id）
+fn resolve_projects(state: &AppState, project_ids: &[String]) -> Vec<Project> {
+    let id_set: std::collections::HashSet<&str> = project_ids.iter().map(|s| s.as_str()).collect();
+    let config = state.config.read();
+    config
+        .projects
+        .iter()
+        .filter(|p| id_set.contains(p.id.as_str()))
+        .cloned()
+        .collect()
+}
+
+/// 串行等待 JoinSet 并汇总为 ProjectGitResult
+async fn collect_git_results(
+    mut set: tokio::task::JoinSet<ProjectGitResult>,
+) -> Vec<ProjectGitResult> {
+    let mut results = Vec::with_capacity(set.len());
+    while let Some(joined) = set.join_next().await {
+        if let Ok(item) = joined {
+            results.push(item);
+        }
+    }
+    results
+}
+
+/// 批量 Pull（并行，受 GitExecutor 并发上限约束）
 #[tauri::command]
 pub async fn batch_pull(
     project_ids: Vec<String>,
     state: State<'_, AppState>,
     window: WebviewWindow,
-) -> Result<Vec<GitResult>, String> {
-    let projects: Vec<_> = {
-        let config = state.config.read();
-        config.projects
-            .iter()
-            .filter(|p| project_ids.contains(&p.id))
-            .cloned()
-            .collect()
-    };
+) -> Result<Vec<ProjectGitResult>, String> {
+    let projects = resolve_projects(&state, &project_ids);
+    let git = state.git.clone();
+    let cache = state.cache.clone();
+    let mut set = tokio::task::JoinSet::new();
 
-    let mut results = Vec::new();
+    for project in projects {
+        let git = git.clone();
+        let cache = cache.clone();
+        let window = window.clone();
+        set.spawn(async move {
+            let task_id = Uuid::new_v4().to_string();
+            let _ = window.emit(
+                "git:progress",
+                OperationEvent {
+                    task_id: task_id.clone(),
+                    project_id: project.id.clone(),
+                    status: "running".to_string(),
+                    message: Some(format!("正在拉取 {}...", project.name)),
+                },
+            );
 
-    for project in &projects {
-        let task_id = Uuid::new_v4().to_string();
-        
-        let _ = window.emit("git:progress", OperationEvent {
-            task_id: task_id.clone(),
-            status: "running".to_string(),
-            message: Some(format!("正在拉取 {}...", project.name)),
-        });
+            let result = git.exec(&project.path, &["pull", "--no-edit"]).await;
+            cache.invalidate(&project.id);
 
-        let result = state.git.exec(&project.path, &["pull", "--no-edit"]).await;
-        results.push(result.clone());
-
-        let status = if result.success {
-            "success"
-        } else {
-            "error"
-        };
-
-        let _ = window.emit("git:progress", OperationEvent {
-            task_id,
-            status: status.to_string(),
-            message: Some(if result.success {
-                format!("成功拉取 {}", project.name)
+            let status = if result.success {
+                "success"
             } else {
-                format!("拉取 {} 失败：{}", project.name, result.stderr)
-            }),
+                "error"
+            };
+            let _ = window.emit(
+                "git:progress",
+                OperationEvent {
+                    task_id,
+                    project_id: project.id.clone(),
+                    status: status.to_string(),
+                    message: Some(if result.success {
+                        format!("成功拉取 {}", project.name)
+                    } else {
+                        format!("拉取 {} 失败：{}", project.name, result.stderr)
+                    }),
+                },
+            );
+
+            ProjectGitResult {
+                project_id: project.id,
+                success: result.success,
+                stdout: result.stdout,
+                stderr: result.stderr,
+                duration_ms: result.duration_ms,
+            }
         });
     }
 
-    Ok(results)
+    Ok(collect_git_results(set).await)
 }
 
-/// 批量 Fetch
+/// 批量 Fetch（并行）
 #[tauri::command]
 pub async fn batch_fetch(
     project_ids: Vec<String>,
     state: State<'_, AppState>,
     window: WebviewWindow,
-) -> Result<Vec<GitResult>, String> {
-    let projects: Vec<_> = {
-        let config = state.config.read();
-        config.projects
-            .iter()
-            .filter(|p| project_ids.contains(&p.id))
-            .cloned()
-            .collect()
-    };
+) -> Result<Vec<ProjectGitResult>, String> {
+    let projects = resolve_projects(&state, &project_ids);
+    let git = state.git.clone();
+    let cache = state.cache.clone();
+    let mut set = tokio::task::JoinSet::new();
 
-    let mut results = Vec::new();
+    for project in projects {
+        let git = git.clone();
+        let cache = cache.clone();
+        let window = window.clone();
+        set.spawn(async move {
+            let task_id = Uuid::new_v4().to_string();
+            let _ = window.emit(
+                "git:progress",
+                OperationEvent {
+                    task_id: task_id.clone(),
+                    project_id: project.id.clone(),
+                    status: "running".to_string(),
+                    message: Some(format!("正在获取 {}...", project.name)),
+                },
+            );
 
-    for project in &projects {
-        let task_id = Uuid::new_v4().to_string();
-        
-        let _ = window.emit("git:progress", OperationEvent {
-            task_id: task_id.clone(),
-            status: "running".to_string(),
-            message: Some(format!("正在获取 {}...", project.name)),
-        });
+            let result = git.exec(&project.path, &["fetch", "--prune", "--all"]).await;
+            cache.invalidate(&project.id);
 
-        let result = state.git.exec(&project.path, &["fetch", "--prune", "--all"]).await;
-        results.push(result.clone());
-
-        let status = if result.success {
-            "success"
-        } else {
-            "error"
-        };
-
-        let _ = window.emit("git:progress", OperationEvent {
-            task_id,
-            status: status.to_string(),
-            message: Some(if result.success {
-                format!("成功获取 {}", project.name)
+            let status = if result.success {
+                "success"
             } else {
-                format!("获取 {} 失败：{}", project.name, result.stderr)
-            }),
+                "error"
+            };
+            let _ = window.emit(
+                "git:progress",
+                OperationEvent {
+                    task_id,
+                    project_id: project.id.clone(),
+                    status: status.to_string(),
+                    message: Some(if result.success {
+                        format!("成功获取 {}", project.name)
+                    } else {
+                        format!("获取 {} 失败：{}", project.name, result.stderr)
+                    }),
+                },
+            );
+
+            ProjectGitResult {
+                project_id: project.id,
+                success: result.success,
+                stdout: result.stdout,
+                stderr: result.stderr,
+                duration_ms: result.duration_ms,
+            }
         });
     }
 
-    Ok(results)
+    Ok(collect_git_results(set).await)
 }
 
-/// 批量 Push
+/// 批量 Push（并行）
 #[tauri::command]
 pub async fn batch_push(
     project_ids: Vec<String>,
     state: State<'_, AppState>,
     window: WebviewWindow,
-) -> Result<Vec<GitResult>, String> {
-    let projects: Vec<_> = {
-        let config = state.config.read();
-        config.projects
-            .iter()
-            .filter(|p| project_ids.contains(&p.id))
-            .cloned()
-            .collect()
-    };
+) -> Result<Vec<ProjectGitResult>, String> {
+    let projects = resolve_projects(&state, &project_ids);
+    let git = state.git.clone();
+    let cache = state.cache.clone();
+    let mut set = tokio::task::JoinSet::new();
 
-    let mut results = Vec::new();
+    for project in projects {
+        let git = git.clone();
+        let cache = cache.clone();
+        let window = window.clone();
+        set.spawn(async move {
+            let task_id = Uuid::new_v4().to_string();
+            let _ = window.emit(
+                "git:progress",
+                OperationEvent {
+                    task_id: task_id.clone(),
+                    project_id: project.id.clone(),
+                    status: "running".to_string(),
+                    message: Some(format!("正在推送 {}...", project.name)),
+                },
+            );
 
-    for project in &projects {
-        let task_id = Uuid::new_v4().to_string();
+            // 无上游分支时直接报错，避免 git 交互式提示卡死
+            let upstream = git
+                .exec(
+                    &project.path,
+                    &["rev-parse", "--abbrev-ref", "--symbolic-full-name", "@{u}"],
+                )
+                .await;
+            if !upstream.success || upstream.stdout.trim().is_empty() {
+                let msg = "当前分支尚未设置上游分支，无法推送".to_string();
+                let _ = window.emit(
+                    "git:progress",
+                    OperationEvent {
+                        task_id,
+                        project_id: project.id.clone(),
+                        status: "error".to_string(),
+                        message: Some(format!("推送 {} 失败：{}", project.name, msg)),
+                    },
+                );
+                return ProjectGitResult {
+                    project_id: project.id,
+                    success: false,
+                    stdout: String::new(),
+                    stderr: msg,
+                    duration_ms: 0,
+                };
+            }
 
-        let _ = window.emit("git:progress", OperationEvent {
-            task_id: task_id.clone(),
-            status: "running".to_string(),
-            message: Some(format!("正在推送 {}...", project.name)),
-        });
+            let result = git.exec(&project.path, &["push"]).await;
+            cache.invalidate(&project.id);
 
-        // 无上游分支时直接报错，避免 git 交互式提示卡死
-        let upstream = state
-            .git
-            .exec(
-                &project.path,
-                &["rev-parse", "--abbrev-ref", "--symbolic-full-name", "@{u}"],
-            )
-            .await;
-        if !upstream.success || upstream.stdout.trim().is_empty() {
-            let msg = "当前分支尚未设置上游分支，无法推送".to_string();
-            results.push(GitResult {
-                success: false,
-                stdout: String::new(),
-                stderr: msg.clone(),
-                duration_ms: 0,
-            });
-            let _ = window.emit("git:progress", OperationEvent {
-                task_id,
-                status: "error".to_string(),
-                message: Some(format!("推送 {} 失败：{}", project.name, msg)),
-            });
-            continue;
-        }
-
-        let result = state.git.exec(&project.path, &["push"]).await;
-        results.push(result.clone());
-
-        let status = if result.success {
-            "success"
-        } else {
-            "error"
-        };
-
-        let _ = window.emit("git:progress", OperationEvent {
-            task_id,
-            status: status.to_string(),
-            message: Some(if result.success {
-                format!("成功推送 {}", project.name)
+            let status = if result.success {
+                "success"
             } else {
-                format!("推送 {} 失败：{}", project.name, result.stderr)
-            }),
+                "error"
+            };
+            let _ = window.emit(
+                "git:progress",
+                OperationEvent {
+                    task_id,
+                    project_id: project.id.clone(),
+                    status: status.to_string(),
+                    message: Some(if result.success {
+                        format!("成功推送 {}", project.name)
+                    } else {
+                        format!("推送 {} 失败：{}", project.name, result.stderr)
+                    }),
+                },
+            );
+
+            ProjectGitResult {
+                project_id: project.id,
+                success: result.success,
+                stdout: result.stdout,
+                stderr: result.stderr,
+                duration_ms: result.duration_ms,
+            }
         });
     }
 
-    Ok(results)
+    Ok(collect_git_results(set).await)
 }
 
 /// 校验 SHA 是否为合法的十六进制提交哈希（长度 1~64）
@@ -900,9 +1072,39 @@ pub async fn open_repo_folder(
     Ok(())
 }
 
+/// 校验路径是否位于任一受管项目根目录内（拒绝 `..` 逃逸与任意系统路径）
+fn path_within_projects(state: &AppState, path: &str) -> Result<std::path::PathBuf, String> {
+    let raw = std::path::PathBuf::from(path);
+    // 禁止显式 .. 片段（规范化前先拦一层）
+    if path.split(['/', '\\']).any(|seg| seg == "..") {
+        return Err("路径不允许包含 ..".to_string());
+    }
+
+    let projects: Vec<String> = {
+        let config = state.config.read();
+        config.projects.iter().map(|p| p.path.clone()).collect()
+    };
+
+    let canon = raw
+        .canonicalize()
+        .map_err(|e| format!("路径无效：{}", e))?;
+
+    for root in &projects {
+        if let Ok(root_canon) = std::path::Path::new(root).canonicalize() {
+            if canon.starts_with(&root_canon) {
+                return Ok(canon);
+            }
+        }
+    }
+
+    Err("路径不在任何已管理项目内".to_string())
+}
+
 /// 列出目录内容（单层，供前端懒加载文件树使用）
+/// 仅允许访问已添加项目的根目录内路径
 #[tauri::command]
-pub async fn list_directory(path: String) -> Result<Vec<FileNode>, String> {
+pub async fn list_directory(path: String, state: State<'_, AppState>) -> Result<Vec<FileNode>, String> {
+    let path = path_within_projects(&state, &path)?;
     let entries = std::fs::read_dir(&path)
         .map_err(|e| format!("读取目录失败：{}", e))?;
 
@@ -947,10 +1149,12 @@ pub async fn list_directory(path: String) -> Result<Vec<FileNode>, String> {
 }
 
 /// 读取文件内容（仅文本，超过 5MB 或二进制/NUL 字节会拒绝）
+/// 仅允许读取已管理项目内的文件
 #[tauri::command]
-pub async fn read_file(path: String) -> Result<String, String> {
+pub async fn read_file(path: String, state: State<'_, AppState>) -> Result<String, String> {
     const MAX_SIZE: u64 = 5 * 1024 * 1024;
 
+    let path = path_within_projects(&state, &path)?;
     let metadata = std::fs::metadata(&path).map_err(|e| format!("读取文件失败：{}", e))?;
     if metadata.len() > MAX_SIZE {
         return Err("文件过大（超过 5MB），无法在编辑器中打开".to_string());
@@ -967,8 +1171,17 @@ pub async fn read_file(path: String) -> Result<String, String> {
 }
 
 /// 写入文件内容
+/// 仅允许写入已管理项目内的文件
 #[tauri::command]
-pub async fn write_file(path: String, content: String) -> Result<(), String> {
+pub async fn write_file(path: String, content: String, state: State<'_, AppState>) -> Result<(), String> {
+    let path = path_within_projects(&state, &path)?;
+    if path.is_dir() {
+        return Err("目标是目录，无法写入".to_string());
+    }
+    // 拒绝写入 .git 内部
+    if path.components().any(|c| c.as_os_str() == ".git") {
+        return Err("不允许写入 .git 目录内的文件".to_string());
+    }
     std::fs::write(&path, content).map_err(|e| format!("保存文件失败：{}", e))
 }
 
@@ -1098,6 +1311,7 @@ pub async fn git_discard(
 }
 
 /// 提交（返回新提交 sha + 摘要）
+/// 存在未解决冲突时拒绝；进行中的 merge 在全部 resolved 后可用 message 或默认信息完成合并提交
 #[tauri::command]
 pub async fn git_commit(
     project_id: String,
@@ -1105,12 +1319,37 @@ pub async fn git_commit(
     state: State<'_, AppState>,
 ) -> Result<GitCommitResult, String> {
     let project = resolve_project(&state, &project_id)?;
-    let trimmed = message.trim();
-    if trimmed.is_empty() {
-        return Err("提交信息不能为空".to_string());
+
+    // 检查未合并路径
+    let unmerged = state
+        .git
+        .exec(&project.path, &["ls-files", "-u"])
+        .await;
+    if unmerged.success && !unmerged.stdout.trim().is_empty() {
+        return Err("存在未解决的合并冲突，请先解决后再提交".to_string());
     }
-    let args = ["commit", "-m", trimmed];
-    let result = state.git.exec(&project.path, &args).await;
+
+    let in_progress = crate::git::GitExecutor::detect_in_progress_op(&project.path);
+    let trimmed = message.trim();
+
+    // merge 进行中且未提供信息时，用 git 自带的 MERGE_MSG 完成提交
+    let is_merge_finish = matches!(in_progress.as_ref().map(|p| p.kind.as_str()), Some("merge"));
+    if trimmed.is_empty() {
+        if !is_merge_finish {
+            return Err("提交信息不能为空".to_string());
+        }
+    }
+
+    let result = if is_merge_finish && trimmed.is_empty() {
+        state
+            .git
+            .exec(&project.path, &["commit", "--no-edit"])
+            .await
+    } else {
+        let args = ["commit", "-m", trimmed];
+        state.git.exec(&project.path, &args).await
+    };
+
     if !result.success {
         return Err(format!("提交失败：{}", result.stderr));
     }
@@ -1130,6 +1369,279 @@ pub async fn git_commit(
     Ok(GitCommitResult {
         commit_sha,
         summary,
+    })
+}
+
+// ============ 冲突 / 合并解决 ============
+
+/// 查询进行中的 merge / rebase / cherry-pick
+#[tauri::command]
+pub async fn git_in_progress(
+    project_id: String,
+    state: State<'_, AppState>,
+) -> Result<Option<InProgressOp>, String> {
+    let project = resolve_project(&state, &project_id)?;
+    Ok(crate::git::GitExecutor::detect_in_progress_op(
+        &project.path,
+    ))
+}
+
+/// 发起合并（目标分支名）
+#[tauri::command]
+pub async fn git_merge(
+    project_id: String,
+    branch: String,
+    state: State<'_, AppState>,
+) -> Result<MergeResult, String> {
+    let project = resolve_project(&state, &project_id)?;
+    if branch.is_empty() || branch.starts_with('-') {
+        return Err("非法的分支名".to_string());
+    }
+
+    let in_progress = crate::git::GitExecutor::detect_in_progress_op(&project.path);
+    if in_progress.is_some() {
+        return Err("已有进行中的合并/变基操作，请先完成或中止".to_string());
+    }
+
+    // 工作区有未暂存改动时拒绝 merge，避免 git 交互/污染
+    let status = state.git.status(&project.path).await;
+    if status.modified > 0 || status.untracked > 0 || status.conflict_count > 0 {
+        return Err("工作区有未提交的改动，请先提交或暂存后再合并".to_string());
+    }
+
+    let result = state
+        .git
+        .exec(&project.path, &["merge", "--no-edit", &branch])
+        .await;
+
+    let has_conflicts = {
+        let ls = state.git.exec(&project.path, &["ls-files", "-u"]).await;
+        ls.success && !ls.stdout.trim().is_empty()
+    };
+
+    state.cache.invalidate(&project_id);
+
+    if !result.success && !has_conflicts {
+        return Err(format!("合并失败：{}", result.stderr));
+    }
+
+    Ok(MergeResult {
+        success: result.success || has_conflicts,
+        has_conflicts,
+        message: if has_conflicts {
+            "合并存在冲突，请在源码控制中解决".to_string()
+        } else {
+            result.stdout.trim().to_string()
+        },
+    })
+}
+
+/// 中止进行中的 merge / rebase / cherry-pick / revert
+#[tauri::command]
+pub async fn git_abort_operation(
+    project_id: String,
+    state: State<'_, AppState>,
+) -> Result<(), String> {
+    let project = resolve_project(&state, &project_id)?;
+    let in_progress = crate::git::GitExecutor::detect_in_progress_op(&project.path)
+        .ok_or_else(|| "当前没有进行中的合并/变基操作".to_string())?;
+
+    let args: Vec<&str> = match in_progress.kind.as_str() {
+        "merge" => vec!["merge", "--abort"],
+        "rebase" => vec!["rebase", "--abort"],
+        "cherry-pick" => vec!["cherry-pick", "--abort"],
+        "revert" => vec!["revert", "--abort"],
+        other => return Err(format!("不支持中止的操作：{}", other)),
+    };
+
+    let result = state.git.exec(&project.path, &args).await;
+    state.cache.invalidate(&project_id);
+    if !result.success {
+        return Err(format!("中止失败：{}", result.stderr));
+    }
+    Ok(())
+}
+
+/// 继续进行中的 merge / rebase / cherry-pick / revert
+/// merge：在冲突已解决后提交；其余走对应 continue
+#[tauri::command]
+pub async fn git_merge_continue(
+    project_id: String,
+    message: Option<String>,
+    state: State<'_, AppState>,
+) -> Result<GitCommitResult, String> {
+    let project = resolve_project(&state, &project_id)?;
+    let in_progress = crate::git::GitExecutor::detect_in_progress_op(&project.path)
+        .ok_or_else(|| "当前没有进行中的合并/变基操作".to_string())?;
+
+    let unmerged = state.git.exec(&project.path, &["ls-files", "-u"]).await;
+    if unmerged.success && !unmerged.stdout.trim().is_empty() {
+        return Err("仍有未解决的冲突文件".to_string());
+    }
+
+    let result = match in_progress.kind.as_str() {
+        "merge" => match message.map(|m| m.trim().to_string()) {
+            Some(msg) if !msg.is_empty() => {
+                let args = ["commit", "-m", msg.as_str()];
+                state.git.exec(&project.path, &args).await
+            }
+            _ => state.git.exec(&project.path, &["commit", "--no-edit"]).await,
+        },
+        "rebase" => {
+            // 停在冲突点时通常应使用 --continue；此处仅在无冲突残留时推进
+            state.git.exec(&project.path, &["rebase", "--continue"]).await
+        }
+        "cherry-pick" => state
+            .git
+            .exec(&project.path, &["cherry-pick", "--continue"])
+            .await,
+        "revert" => state.git.exec(&project.path, &["revert", "--continue"]).await,
+        other => {
+            return Err(format!("不支持继续该操作：{}", other));
+        }
+    };
+
+    if !result.success {
+        return Err(format!("完成操作失败：{}", result.stderr));
+    }
+
+    let show = state
+        .git
+        .exec(&project.path, &["show", "-s", "--format=%H%n%s", "HEAD"])
+        .await;
+    let (commit_sha, summary) = if show.success {
+        let mut lines = show.stdout.lines();
+        (
+            lines.next().unwrap_or("").to_string(),
+            lines.next().unwrap_or("").to_string(),
+        )
+    } else {
+        (String::new(), String::new())
+    };
+
+    state.cache.invalidate(&project_id);
+    Ok(GitCommitResult {
+        commit_sha,
+        summary,
+    })
+}
+
+/// 采纳一侧解决冲突（ours=当前分支，theirs=被合入分支），并自动 `git add`
+#[tauri::command]
+pub async fn git_resolve_conflict(
+    project_id: String,
+    paths: Vec<String>,
+    side: ConflictSide,
+    state: State<'_, AppState>,
+) -> Result<(), String> {
+    let project = resolve_project(&state, &project_id)?;
+    if paths.is_empty() {
+        return Ok(());
+    }
+
+    let side_flag = match side {
+        ConflictSide::Ours => "--ours",
+        ConflictSide::Theirs => "--theirs",
+    };
+
+    let mut checkout_args: Vec<String> = vec!["checkout".into(), side_flag.into(), "--".into()];
+    for p in &paths {
+        checkout_args.push(p.clone());
+    }
+    let refs: Vec<&str> = checkout_args.iter().map(|s| s.as_str()).collect();
+    let r = state.git.exec(&project.path, &refs).await;
+
+    // checkout 失败时仍尝试 add：例如 delete/modify 冲突一侧无文件内容
+    let mut add_args: Vec<String> = vec!["add".into(), "--".into()];
+    for p in &paths {
+        add_args.push(p.clone());
+    }
+    let add_refs: Vec<&str> = add_args.iter().map(|s| s.as_str()).collect();
+    let a = state.git.exec(&project.path, &add_refs).await;
+    if !a.success {
+        let detail = if !r.success {
+            format!("{} | {}", r.stderr.trim(), a.stderr.trim())
+        } else {
+            a.stderr.trim().to_string()
+        };
+        return Err(format!(
+            "采纳「{}」失败：{}",
+            match side {
+                ConflictSide::Ours => "我方",
+                ConflictSide::Theirs => "对方",
+            },
+            detail
+        ));
+    }
+
+    state.cache.invalidate(&project_id);
+    Ok(())
+}
+
+/// 手动编辑后标记冲突已解决（git add）
+#[tauri::command]
+pub async fn git_mark_conflict_resolved(
+    project_id: String,
+    paths: Vec<String>,
+    state: State<'_, AppState>,
+) -> Result<(), String> {
+    let project = resolve_project(&state, &project_id)?;
+    if paths.is_empty() {
+        return Ok(());
+    }
+    let mut args: Vec<String> = vec!["add".into(), "--".into()];
+    for p in &paths {
+        args.push(p.clone());
+    }
+    let refs: Vec<&str> = args.iter().map(|s| s.as_str()).collect();
+    let r = state.git.exec(&project.path, &refs).await;
+    if !r.success {
+        return Err(format!("标记已解决失败：{}", r.stderr));
+    }
+    state.cache.invalidate(&project_id);
+    Ok(())
+}
+
+/// 读取冲突文件的三路内容（base / ours / theirs）
+#[tauri::command]
+pub async fn git_conflict_file_content(
+    project_id: String,
+    path: String,
+    state: State<'_, AppState>,
+) -> Result<ConflictFileContent, String> {
+    let project = resolve_project(&state, &project_id)?;
+
+    async fn show_stage(
+        git: &crate::git::GitExecutor,
+        repo: &str,
+        stage: u8,
+        path: &str,
+    ) -> (String, bool) {
+        let spec = format!(":{}:{}", stage, path);
+        let r = git.exec(repo, &["show", &spec]).await;
+        if r.success {
+            (r.stdout, true)
+        } else {
+            (String::new(), false)
+        }
+    }
+
+    let (base, exists_base) = show_stage(&state.git, &project.path, 1, &path).await;
+    let (ours, exists_ours) = show_stage(&state.git, &project.path, 2, &path).await;
+    let (theirs, exists_theirs) = show_stage(&state.git, &project.path, 3, &path).await;
+
+    let is_binary =
+        base.contains('\0') || ours.contains('\0') || theirs.contains('\0');
+
+    Ok(ConflictFileContent {
+        path,
+        base,
+        ours,
+        theirs,
+        exists_base,
+        exists_ours,
+        exists_theirs,
+        is_binary,
     })
 }
 

@@ -7,6 +7,24 @@
     <div class="queue-header">
       <span class="queue-title">操作队列</span>
       <div class="header-actions">
+        <span v-if="summary" class="queue-summary">{{ summary }}</span>
+        <Button
+          v-if="operationStore.errorCount > 0 && !operationStore.isQueueRunning"
+          variant="ghost"
+          size="sm"
+          :disabled="!operationStore.lastOperation"
+          @click="operationStore.retryFailed()"
+        >
+          重试失败
+        </Button>
+        <Button
+          v-if="operationStore.isQueueRunning"
+          variant="ghost"
+          size="sm"
+          @click="operationStore.cancelQueue()"
+        >
+          取消待执行
+        </Button>
         <Button variant="ghost" size="sm" @click="clearCompleted">清除已完成</Button>
         <Button variant="ghost" size="icon" title="关闭" @click="showPanel = false">
           <X :size="16" />
@@ -51,6 +69,13 @@ const showPanel = computed({
   get: () => operationStore.showPanel,
   set: (value) => (operationStore.showPanel = value),
 });
+const summary = computed(() => {
+  if (!tasks.value.length) return '';
+  const parts: string[] = [];
+  if (operationStore.successCount) parts.push(`成功 ${operationStore.successCount}`);
+  if (operationStore.errorCount) parts.push(`失败 ${operationStore.errorCount}`);
+  return parts.join(' · ');
+});
 
 function clearCompleted() {
   operationStore.clearCompleted();
@@ -93,6 +118,11 @@ function operationText(operation: string) {
   justify-content: space-between;
   padding: 8px 10px;
   border-bottom: 1px solid var(--border);
+}
+.queue-summary {
+  font-size: 11px;
+  color: var(--muted-foreground);
+  margin-right: 4px;
 }
 .queue-title {
   font-size: 14px;

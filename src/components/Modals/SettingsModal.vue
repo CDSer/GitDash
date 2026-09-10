@@ -19,14 +19,14 @@
         <div class="flex items-center gap-2">
           <Input
             type="number"
-            :min="10"
-            :max="300"
-            :step="5"
+            :min="0"
+            :max="3600"
+            :step="30"
             :model-value="String(settings.auto_fetch_interval)"
-            @update:model-value="(v: string) => (settings.auto_fetch_interval = clampInt(v, 10, 300, 30))"
+            @update:model-value="(v: string) => (settings.auto_fetch_interval = clampInt(v, 0, 3600, 600))"
             class="w-32"
           />
-          <span class="form-tip-inline">秒（10 - 300）</span>
+          <span class="form-tip-inline">秒；0 = 关闭（推荐 ≥ 300）</span>
         </div>
       </div>
 

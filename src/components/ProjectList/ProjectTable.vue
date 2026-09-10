@@ -4,14 +4,32 @@
 -->
 <template>
   <div class="flex h-full flex-col">
-    <!-- 搜索框 -->
+    <!-- 搜索框 + 冲突汇总条 -->
     <div class="border-b border-border p-3">
-      <div class="relative max-w-[320px]">
-        <Search
-          :size="14"
-          class="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground"
-        />
-        <Input v-model="searchQuery" placeholder="搜索项目..." :style="{ paddingLeft: '2rem' }" />
+      <div class="flex flex-wrap items-center gap-3">
+        <div class="relative max-w-[320px] flex-1">
+          <Search
+            :size="14"
+            class="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground"
+          />
+          <Input v-model="searchQuery" placeholder="搜索项目..." :style="{ paddingLeft: '2rem' }" />
+        </div>
+        <button
+          v-if="conflictProjects.length"
+          type="button"
+          class="conflict-banner"
+          @click="openFirstConflict"
+        >
+          {{ conflictProjects.length }} 个仓库存在冲突 · 点击处理
+        </button>
+        <button
+          v-if="inProgressProjects.length"
+          type="button"
+          class="progress-banner"
+          @click="openSourceControl(inProgressProjects[0])"
+        >
+          {{ inProgressProjects.length }} 个仓库有进行中的合并/变基
+        </button>
       </div>
     </div>
 
@@ -19,10 +37,11 @@
     <div class="min-h-0 flex-1 overflow-auto">
       <div class="min-w-[860px]">
         <!-- 表头 -->
-        <div class="grid items-center border-b border-border bg-card px-3 py-2 text-xs font-medium text-muted-foreground"
-          style="grid-template-columns: 36px minmax(160px, 1.4fr) minmax(180px, 1.6fr) 120px 84px 200px 130px"
+        <div
+          class="grid items-center border-b border-border bg-card px-3 py-2 text-xs font-medium text-muted-foreground"
+          :style="{ gridTemplateColumns: gridTemplate }"
         >
-          <div class="flex justify-center">
+          <div class="col-th flex justify-center">
             <input
               type="checkbox"
               class="row-check"
@@ -31,12 +50,49 @@
               @change="toggleSelectAll"
             />
           </div>
-          <div>名称</div>
-          <div>路径</div>
-          <div>分支</div>
-          <div class="text-center">状态</div>
-          <div class="text-center">变更</div>
-          <div class="text-right pr-1">操作</div>
+          <div class="col-th" data-col-id="name" title="双击恢复默认宽度">
+            <span class="truncate">名称</span>
+            <span
+              class="col-resize-handle"
+              @pointerdown="beginResize('name', $event)"
+              @dblclick.stop="resetColumn('name')"
+            />
+          </div>
+          <div class="col-th" data-col-id="path" title="双击恢复默认宽度">
+            <span class="truncate">路径</span>
+            <span
+              class="col-resize-handle"
+              @pointerdown="beginResize('path', $event)"
+              @dblclick.stop="resetColumn('path')"
+            />
+          </div>
+          <div class="col-th" data-col-id="branch" title="双击恢复默认宽度">
+            <span class="truncate">分支</span>
+            <span
+              class="col-resize-handle"
+              @pointerdown="beginResize('branch', $event)"
+              @dblclick.stop="resetColumn('branch')"
+            />
+          </div>
+          <div class="col-th" data-col-id="status" title="双击恢复默认宽度">
+            <span>状态</span>
+            <span
+              class="col-resize-handle"
+              @pointerdown="beginResize('status', $event)"
+              @dblclick.stop="resetColumn('status')"
+            />
+          </div>
+          <div class="col-th" data-col-id="changes" title="双击恢复默认宽度">
+            <span>变更</span>
+            <span
+              class="col-resize-handle"
+              @pointerdown="beginResize('changes', $event)"
+              @dblclick.stop="resetColumn('changes')"
+            />
+          </div>
+          <div class="col-th" data-col-id="actions">
+            <span>操作</span>
+          </div>
         </div>
 
         <!-- 行 -->
@@ -45,7 +101,7 @@
           :key="row.id"
           :data-project-row-id="row.id"
           class="group grid items-center border-b border-border px-3 py-2 text-[13px] hover:bg-accent/60"
-          style="grid-template-columns: 36px minmax(160px, 1.4fr) minmax(180px, 1.6fr) 120px 84px 200px 130px"
+          :style="{ gridTemplateColumns: gridTemplate }"
           @dblclick="openRepo(row)"
         >
           <div class="flex justify-center">
@@ -56,20 +112,34 @@
               @click.stop="appStore.toggleSelect(row.id)"
             />
           </div>
-          <div class="flex min-w-0 select-none items-center gap-1.5">
-            <span class="truncate font-medium">{{ row.name }}</span>
+          <div class="path-tail select-none font-medium" dir="rtl" :title="row.name">
+            <span class="path-tail-inner" dir="ltr">{{ row.name }}</span>
           </div>
-          <div class="truncate text-muted-foreground" :title="row.path">{{ row.path }}</div>
-          <div class="truncate text-muted-foreground">
-            {{ statusFor(row.id)?.branch || '-' }}
+          <div class="path-tail text-muted-foreground" dir="rtl" :title="row.path">
+            <span class="path-tail-inner" dir="ltr">{{ row.path }}</span>
           </div>
-          <div class="flex justify-center">
+          <div class="flex min-w-0 items-center">
+            <Tag
+              v-if="statusFor(row.id)?.branch"
+              variant="info"
+              class="branch-tag max-w-full"
+              :title="statusFor(row.id)?.branch"
+            >
+              <GitBranch :size="11" class="shrink-0" />
+              <span class="truncate">{{ statusFor(row.id)?.branch }}</span>
+            </Tag>
+            <span v-else class="text-muted-foreground">-</span>
+          </div>
+          <div class="flex items-center">
             <StatusBadge :status="statusFor(row.id)" />
           </div>
-          <div class="flex justify-center">
-            <StatusChanges :status="statusFor(row.id)" />
+          <div class="flex items-center">
+            <StatusChanges
+              :status="statusFor(row.id)"
+              @open-conflicts="openSourceControl(row)"
+            />
           </div>
-          <div class="flex items-center justify-end gap-1 pr-1">
+          <div class="flex items-center gap-1">
             <Button variant="ghost" size="icon" title="打开工作区" @click.stop="enterWorkspace(row)">
               <Monitor :size="15" />
             </Button>
@@ -180,7 +250,7 @@ import {
 import type { Project, ProjectStatus } from '../../types';
 import { useAppStore } from '../../stores/appStore';
 import { useOperationStore } from '../../stores/operationStore';
-import { useRouter } from 'vue-router';
+import { useTabStore } from '../../stores/tabStore';
 import { openRepoFolder } from '../../lib/tauriApi';
 import StatusBadge from './StatusBadge.vue';
 import StatusChanges from './StatusChanges.vue';
@@ -191,17 +261,32 @@ const ConfirmDialog = defineAsyncComponent(
   () => import('../ui/ConfirmDialog.vue'),
 );
 import { useProjectStatus } from '../../composables/useProjectStatus';
+import { useResizableColumns } from '../../composables/useResizableColumns';
 import { toast } from '../../lib/toast';
 import Button from '../ui/Button.vue';
 import Input from '../ui/Input.vue';
 import Dropdown from '../ui/Dropdown.vue';
 import DropdownItem from '../ui/DropdownItem.vue';
 import Empty from '../ui/Empty.vue';
+import Tag from '../ui/Tag.vue';
 
 const appStore = useAppStore();
 const operationStore = useOperationStore();
-const router = useRouter();
+const tabStore = useTabStore();
 const { getStatus } = useProjectStatus();
+
+const { gridTemplate, beginResize, resetColumn } = useResizableColumns(
+  'gitdash:project-table-cols',
+  [
+    { id: 'check', defaultTrack: '36px', fixed: true },
+    { id: 'name', defaultTrack: 'minmax(160px, 1.4fr)', min: 100, max: 480 },
+    { id: 'path', defaultTrack: 'minmax(180px, 1.6fr)', min: 120, max: 640 },
+    { id: 'branch', defaultTrack: '120px', min: 72, max: 280 },
+    { id: 'status', defaultTrack: '84px', min: 64, max: 180 },
+    { id: 'changes', defaultTrack: '200px', min: 100, max: 400 },
+    { id: 'actions', defaultTrack: '130px', fixed: true },
+  ],
+);
 
 const showSourceControl = ref(false);
 const sourceControlProject = ref<Project | null>(null);
@@ -230,6 +315,18 @@ const allSelected = computed(
 );
 const someSelected = computed(() => selectedProjectIds.value.size > 0);
 
+const conflictProjects = computed(() =>
+  appStore.projects.filter((p) => (appStore.statuses.get(p.id)?.conflict_count ?? 0) > 0),
+);
+const inProgressProjects = computed(() =>
+  appStore.projects.filter((p) => !!appStore.statuses.get(p.id)?.in_progress),
+);
+
+function openFirstConflict() {
+  const p = conflictProjects.value[0];
+  if (p) openSourceControl(p);
+}
+
 function toggleSelectAll() {
   if (allSelected.value) {
     appStore.clearSelection();
@@ -252,12 +349,11 @@ function groupName(groupId: string | null) {
 }
 
 function enterWorkspace(project: Project) {
-  router.push({ name: 'workspace', params: { projectId: project.id } });
+  tabStore.openProject(project.id, 'workspace');
 }
 
 function openHistory(project: Project) {
-  // Git 记录已改为独立路由页面
-  router.push({ name: 'history', params: { projectId: project.id } });
+  tabStore.openProject(project.id, 'history');
 }
 
 function openSourceControl(project: Project) {
@@ -358,6 +454,18 @@ onMounted(() => {
   accent-color: var(--primary);
   cursor: pointer;
 }
+/* 宽度不足时优先保留路径末尾，前面省略（拖拽列宽时实时自适应） */
+.path-tail {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  direction: rtl;
+  text-align: left;
+}
+.path-tail-inner {
+  unicode-bidi: embed;
+}
 .group-dot {
   display: inline-block;
   width: 8px;
@@ -365,5 +473,35 @@ onMounted(() => {
   margin-right: 6px;
   border-radius: 50%;
   vertical-align: middle;
+}
+.branch-tag {
+  max-width: 100%;
+}
+.branch-tag .truncate {
+  min-width: 0;
+}
+.conflict-banner,
+.progress-banner {
+  border: none;
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 600;
+  padding: 4px 10px;
+  border-radius: 6px;
+  white-space: nowrap;
+}
+.conflict-banner {
+  background: color-mix(in oklab, #dc2626 16%, transparent);
+  color: #dc2626;
+}
+.conflict-banner:hover {
+  background: color-mix(in oklab, #dc2626 26%, transparent);
+}
+.progress-banner {
+  background: color-mix(in oklab, #d97706 16%, transparent);
+  color: #b45309;
+}
+.progress-banner:hover {
+  background: color-mix(in oklab, #d97706 26%, transparent);
 }
 </style>

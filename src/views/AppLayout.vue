@@ -12,7 +12,7 @@
         :class="{ collapsed: sidebarCollapsed, resizing: isResizing }"
       >
         <div v-if="!sidebarCollapsed" class="flex h-full flex-col">
-          <GroupTree />
+          <GroupTree @add-project="showAddModal = true" />
         </div>
 
         <!-- 收起状态：窄条 + 展开按钮 -->
@@ -46,32 +46,53 @@
       </aside>
 
       <div class="flex min-w-0 flex-1 flex-col">
+        <!-- 项目多标签栏（Fork 风格）：始终可见；无标签时也可从 + 打开 -->
+        <ProjectTabBar @open-picker="showProjectPicker = true" />
+
+        <!-- 工具栏：仅在主页显示完整操作；标签视图自带顶栏 -->
         <header
+          v-if="tabStore.viewKind === 'home'"
           class="flex h-12 shrink-0 items-center justify-between border-b border-border bg-card px-4"
         >
           <div class="flex items-center gap-2">
-            <Dropdown>
-              <template #trigger>
-                <Button variant="primary">
-                  <Plus :size="14" /> 添加项目 <ChevronDown :size="14" />
-                </Button>
-              </template>
-              <DropdownItem :icon="Plus" @click="showAddModal = true">
-                单个添加
-              </DropdownItem>
-              <DropdownItem :icon="FolderPlus" @click="showBatchImportModal = true">
-                批量导入
-              </DropdownItem>
-            </Dropdown>
+            <Button variant="ghost" size="icon" title="批量导入" @click="showBatchImportModal = true">
+              <FolderPlus :size="16" />
+            </Button>
             <Button variant="ghost" size="icon" title="设置" @click="showSettings = true">
               <Settings :size="16" />
             </Button>
           </div>
           <span class="text-xs text-muted-foreground">{{ projects.length }} 个项目</span>
         </header>
+        <header
+          v-else
+          class="flex h-10 shrink-0 items-center justify-between border-b border-border bg-card px-3"
+        >
+          <div class="flex items-center gap-2 text-xs text-muted-foreground">
+            <span>{{ projects.length }} 个项目</span>
+            <span v-if="tabStore.tabs.length">· {{ tabStore.tabs.length }} 个标签已打开</span>
+          </div>
+          <div class="flex items-center gap-1">
+            <Button variant="ghost" size="sm" title="设置" @click="showSettings = true">
+              <Settings :size="14" />
+            </Button>
+            <Button variant="ghost" size="sm" title="批量导入" @click="showBatchImportModal = true">
+              <FolderPlus :size="14" />
+            </Button>
+          </div>
+        </header>
 
         <main class="min-h-0 flex-1 overflow-hidden">
-          <RouterView />
+          <!-- 活动项目标签：嵌入工作区 / 变更 / 历史 -->
+          <ProjectTabView
+            v-if="tabStore.viewKind === 'project' && tabStore.activeTab"
+            :key="tabStore.activeTab.projectId"
+            :project-id="tabStore.activeTab.projectId"
+          />
+          <!-- 项目列表系统标签 -->
+          <ProjectListView v-else-if="tabStore.viewKind === 'projects'" />
+          <!-- 主页（RouterView） -->
+          <RouterView v-else />
         </main>
       </div>
     </div>
@@ -81,18 +102,27 @@
     <AddProjectModal v-model="showAddModal" />
     <BatchImportModal v-model="showBatchImportModal" />
     <SettingsModal v-model="showSettings" />
+    <ProjectPickerModal v-model="showProjectPicker" />
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted, defineAsyncComponent } from 'vue';
-import { Plus, Settings, ChevronDown, FolderPlus, PanelLeftOpen, PanelLeftClose } from 'lucide-vue-next';
+import { ref, computed, onMounted, onUnmounted, defineAsyncComponent } from 'vue';
+import { Settings, FolderPlus, PanelLeftOpen, PanelLeftClose } from 'lucide-vue-next';
 import { useAppStore } from '../stores/appStore';
+import { useProjectStatus } from '../composables/useProjectStatus';
+import { useTabStore } from '../stores/tabStore';
 import GroupTree from '../components/Sidebar/GroupTree.vue';
+import ProjectTabBar from '../components/Tabs/ProjectTabBar.vue';
 import OperationQueue from '../components/OperationPanel/OperationQueue.vue';
 import Button from '../components/ui/Button.vue';
-import Dropdown from '../components/ui/Dropdown.vue';
-import DropdownItem from '../components/ui/DropdownItem.vue';
+
+const ProjectTabView = defineAsyncComponent(
+  () => import('./ProjectTabView.vue'),
+);
+const ProjectListView = defineAsyncComponent(
+  () => import('./ProjectListView.vue'),
+);
 
 const AddProjectModal = defineAsyncComponent(
   () => import('../components/Modals/AddProjectModal.vue'),
@@ -103,12 +133,18 @@ const BatchImportModal = defineAsyncComponent(
 const SettingsModal = defineAsyncComponent(
   () => import('../components/Modals/SettingsModal.vue'),
 );
+const ProjectPickerModal = defineAsyncComponent(
+  () => import('../components/Modals/ProjectPickerModal.vue'),
+);
 
 const appStore = useAppStore();
+const tabStore = useTabStore();
+const { getStatus, startPolling, stopPolling, watchRepoChanges } = useProjectStatus();
 
 const showAddModal = ref(false);
 const showBatchImportModal = ref(false);
 const showSettings = ref(false);
+const showProjectPicker = ref(false);
 
 const projects = computed(() => appStore.projects);
 
@@ -129,6 +165,20 @@ function setSidebarWidth(width: number) {
 onMounted(async () => {
   await appStore.loadConfig();
 
+  // 配置加载后：清理已删除项目的标签，并确保打开的标签状态可用
+  tabStore.removeProjectTabs(
+    appStore.projects.length === 0
+      ? tabStore.openProjectIds.slice()
+      : tabStore.openProjectIds.filter((id) => !appStore.projects.some((p) => p.id === id)),
+  );
+
+  // 实时状态：监听后端 repo:changed + 低频轮询兜底
+  await watchRepoChanges();
+  startPolling(60_000);
+  appStore.projects.forEach((project) => {
+    void getStatus(project.id, false);
+  });
+
   let width = DEFAULT_WIDTH;
   const savedWidth = localStorage.getItem(SIDEBAR_WIDTH_KEY);
   if (savedWidth) {
@@ -143,6 +193,10 @@ onMounted(async () => {
   if (savedCollapsed) {
     sidebarCollapsed.value = savedCollapsed === 'true';
   }
+});
+
+onUnmounted(() => {
+  stopPolling();
 });
 
 function toggleSidebar() {

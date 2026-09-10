@@ -8,9 +8,30 @@
   <div class="flex h-full flex-col">
     <div class="border-b border-border p-3">
       <div class="mb-3 text-sm font-semibold">GitDash</div>
-      <Button variant="outline" class="w-full" @click="openAddGroup">
-        <Plus :size="14" /> 添加分组
+      <Button
+        variant="ghost"
+        class="mb-1.5 w-full justify-start"
+        :class="isHomeRoute ? 'nav-active' : ''"
+        @click="goHome"
+      >
+        <Home :size="14" /> 主页
       </Button>
+      <Button
+        variant="ghost"
+        class="mb-1.5 w-full justify-start"
+        :class="isProjectsRoute ? 'nav-active' : ''"
+        @click="goProjects"
+      >
+        <List :size="14" /> 项目
+      </Button>
+      <div class="flex gap-1.5">
+        <Button variant="outline" class="min-w-0 flex-1" @click="$emit('add-project')">
+          <Plus :size="14" /> 添加项目
+        </Button>
+        <Button variant="outline" class="min-w-0 flex-1" @click="openAddGroup">
+          <Plus :size="14" /> 添加分组
+        </Button>
+      </div>
     </div>
 
     <div ref="scrollContainer" class="min-h-0 flex-1 overflow-y-auto p-1.5">
@@ -133,16 +154,19 @@
 
 <script setup lang="ts">
 import { computed, ref, onMounted, watch, onBeforeUnmount } from 'vue';
-import { Plus, Pencil, Trash2, FolderX, ChevronRight, ChevronDown } from 'lucide-vue-next';
+import { Plus, Pencil, Trash2, FolderX, ChevronRight, ChevronDown, Home, List } from 'lucide-vue-next';
 import { useAppStore } from '../../stores/appStore';
+import { useTabStore } from '../../stores/tabStore';
 import { useDragProject } from '../../composables/useDragProject';
-import { useRouter } from 'vue-router';
+import { useRoute, useRouter } from 'vue-router';
 import type { Group, Project } from '../../types';
 import { defineAsyncComponent } from 'vue';
 import Button from '../ui/Button.vue';
 import ContextMenu from '../ui/ContextMenu.vue';
 import ContextMenuItem from '../ui/ContextMenuItem.vue';
 import Divider from '../ui/Divider.vue';
+
+defineEmits<{ (e: 'add-project'): void }>();
 
 const AddGroupModal = defineAsyncComponent(
   () => import('../Modals/AddGroupModal.vue'),
@@ -153,7 +177,9 @@ const ConfirmDialog = defineAsyncComponent(
 import { toast } from '../../lib/toast';
 
 const appStore = useAppStore();
+const tabStore = useTabStore();
 const drag = useDragProject();
+const route = useRoute();
 const router = useRouter();
 
 const groupModalVisible = ref(false);
@@ -202,6 +228,25 @@ watch(
 
 function selectGroup(groupId: string) {
   appStore.activeGroupId = groupId;
+  // 打开项目列表系统标签（保持 tab 体系）
+  tabStore.openProjectsTab();
+}
+
+const isHomeRoute = computed(
+  () => tabStore.viewKind === 'home' || (route.name === 'home' && !tabStore.activeProjectId),
+);
+const isProjectsRoute = computed(
+  () => tabStore.viewKind === 'projects' || (route.name === 'projects' && !tabStore.activeProjectId),
+);
+
+function goHome() {
+  tabStore.setActive(null);
+  router.push({ name: 'home' });
+}
+
+function goProjects() {
+  appStore.activeGroupId = 'all';
+  tabStore.openProjectsTab();
 }
 
 let suppressRowClickUntil = 0;
@@ -398,10 +443,10 @@ function projectsInGroup(groupId: string): Project[] {
   return appStore.projects.filter((p) => p.group_id === groupId);
 }
 
-// 点击左侧项目行进入 Git 记录页（拖拽后松手瞬间忽略，避免误跳转）
+// 点击左侧项目行：打开多标签（默认历史模式）
 function openProjectHistory(project: Project) {
   if (drag.wasDraggingRecently()) return;
-  router.push({ name: 'history', params: { projectId: project.id } });
+  tabStore.openProject(project.id, 'history');
 }
 
 function openAddGroup() {
@@ -601,5 +646,9 @@ async function doUnmanage() {
   font-size: 12px;
   color: var(--muted-foreground);
   opacity: 0.6;
+}
+.nav-active {
+  background-color: color-mix(in oklab, var(--primary) 16%, transparent);
+  color: var(--primary);
 }
 </style>

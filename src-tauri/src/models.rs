@@ -75,6 +75,50 @@ pub struct ChangedFile {
     pub worktree_status: String,
     /// 是否已暂存（X 列非空且无改动标记）
     pub staged: bool,
+    /// 是否为未合并的冲突文件（UU/AA/DD/AU/UA/DU/UD 等）
+    pub is_conflict: bool,
+}
+
+/// 进行中的 Git 操作（merge / rebase / cherry-pick / revert）
+#[derive(Serialize, Deserialize, Clone, Debug, Default, PartialEq)]
+pub struct InProgressOp {
+    /// merge | rebase | cherry-pick | revert
+    pub kind: String,
+    /// 操作头部提交摘要（可读信息）
+    pub head_message: Option<String>,
+}
+
+/// 冲突文件三路内容
+#[derive(Serialize, Clone, Debug, Default)]
+pub struct ConflictFileContent {
+    pub path: String,
+    /// 公共祖先（stage 1）
+    pub base: String,
+    /// 当前分支（stage 2 / ours）
+    pub ours: String,
+    /// 合入分支（stage 3 / theirs）
+    pub theirs: String,
+    pub exists_base: bool,
+    pub exists_ours: bool,
+    pub exists_theirs: bool,
+    pub is_binary: bool,
+}
+
+/// 解决冲突时采纳的一侧
+#[derive(Serialize, Deserialize, Clone, Copy, Debug, PartialEq, Eq)]
+#[serde(rename_all = "lowercase")]
+pub enum ConflictSide {
+    Ours,
+    Theirs,
+}
+
+/// 发起合并 / 继续合并的结果
+#[derive(Serialize, Clone, Debug)]
+pub struct MergeResult {
+    pub success: bool,
+    /// 合并过程中是否出现冲突
+    pub has_conflicts: bool,
+    pub message: String,
 }
 
 /// 项目 Git 状态
@@ -92,6 +136,10 @@ pub struct ProjectStatus {
     pub is_detached: bool,
     /// 逐文件改动列表（staging 面板用）
     pub changed_files: Vec<ChangedFile>,
+    /// 进行中的 merge/rebase/cherry-pick 等
+    pub in_progress: Option<InProgressOp>,
+    /// 未解决冲突文件数
+    pub conflict_count: u32,
     pub last_fetched: Option<i64>,
     pub is_fetching: bool,
     pub error: Option<String>,
@@ -110,8 +158,20 @@ pub struct GitResult {
 #[derive(Serialize, Clone, Debug)]
 pub struct OperationEvent {
     pub task_id: String,
+    /// 关联项目 ID，前端据此匹配任务行
+    pub project_id: String,
     pub status: String,
     pub message: Option<String>,
+}
+
+/// 带项目 ID 的 Git 执行结果（批量操作返回，避免下标错位）
+#[derive(Serialize, Clone, Debug)]
+pub struct ProjectGitResult {
+    pub project_id: String,
+    pub success: bool,
+    pub stdout: String,
+    pub stderr: String,
+    pub duration_ms: u64,
 }
 
 /// Git 分支信息
@@ -129,6 +189,10 @@ pub struct Branch {
     pub worktree_path: Option<String>,
 }
 
+fn default_true() -> bool {
+    true
+}
+
 /// Git 提交记录
 #[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct Commit {
@@ -139,6 +203,9 @@ pub struct Commit {
     pub email: String,
     pub date: i64,
     pub parents: Vec<String>,
+    /// 是否已推送到上游（无上游跟踪时视为 true，不标未推送）
+    #[serde(default = "default_true")]
+    pub is_pushed: bool,
 }
 
 /// 提交中的文件改动（含增删行数、改名信息）

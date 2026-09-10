@@ -14,23 +14,79 @@
         @update:model-value="onBranchChange"
       />
       <span class="text-xs text-muted-foreground">{{ commits.length }} 次提交</span>
+      <Tag v-if="unpushedCount > 0" variant="warning">
+        {{ unpushedCount }} 条未推送
+      </Tag>
       <Button variant="ghost" size="icon" class="ml-auto" title="关闭" @click="$emit('close')">
         <X :size="16" />
       </Button>
     </div>
 
     <div class="git-body relative flex min-h-0 flex-1 overflow-y-auto overflow-x-hidden" @scroll="onScroll">
-      <div class="git-rail shrink-0 border-r border-border">
+      <div class="git-rail-col shrink-0 border-r border-border">
+        <div class="git-head-rail" />
         <GitGraphRail :commits="commits" :selected-id="selectedId" @select="onSelect" />
       </div>
       <div class="git-list min-w-0 flex-1">
+        <div class="git-head" :style="{ gridTemplateColumns: gridTemplate }">
+          <div class="col-th" data-col-id="msg" title="双击恢复默认宽度">
+            <span class="truncate">提交信息</span>
+            <span
+              class="col-resize-handle"
+              @pointerdown="beginResize('msg', $event)"
+              @dblclick.stop="resetColumn('msg')"
+            />
+          </div>
+          <div class="col-th" data-col-id="status" title="双击恢复默认宽度">
+            <span>状态</span>
+            <span
+              class="col-resize-handle"
+              @pointerdown="beginResize('status', $event)"
+              @dblclick.stop="resetColumn('status')"
+            />
+          </div>
+          <div class="col-th" data-col-id="author" title="双击恢复默认宽度">
+            <span class="truncate">作者</span>
+            <span
+              class="col-resize-handle"
+              @pointerdown="beginResize('author', $event)"
+              @dblclick.stop="resetColumn('author')"
+            />
+          </div>
+          <div class="col-th" data-col-id="date" title="双击恢复默认宽度">
+            <span class="truncate">时间</span>
+            <span
+              class="col-resize-handle"
+              @pointerdown="beginResize('date', $event)"
+              @dblclick.stop="resetColumn('date')"
+            />
+          </div>
+          <div class="col-th" data-col-id="id" title="双击恢复默认宽度">
+            <span class="truncate">ID</span>
+            <span
+              class="col-resize-handle"
+              @pointerdown="beginResize('id', $event)"
+              @dblclick.stop="resetColumn('id')"
+            />
+          </div>
+        </div>
         <div
           v-for="c in commits"
           :key="c.id"
           :class="['git-row', { active: c.id === selectedId }]"
+          :style="{ gridTemplateColumns: gridTemplate }"
           @click="onSelect(c.id)"
         >
           <div class="git-row-msg" :title="c.message">{{ firstLine(c.message) }}</div>
+          <div class="git-badge-cell">
+            <Tag
+              v-if="c.is_pushed === false"
+              variant="warning"
+              title="尚未推送到远程"
+            >
+              未推送
+            </Tag>
+          </div>
           <span class="git-author" :title="c.author">{{ c.author }}</span>
           <span class="git-date">{{ formatDate(c.date) }}</span>
           <span class="git-hash">{{ c.short_id }}</span>
@@ -71,6 +127,7 @@ import Select from '../ui/Select.vue';
 import Button from '../ui/Button.vue';
 import Tag from '../ui/Tag.vue';
 import Spinner from '../ui/Spinner.vue';
+import { useResizableColumns } from '../../composables/useResizableColumns';
 
 const props = defineProps<{ projectId: string }>();
 defineEmits<{ (e: 'close'): void }>();
@@ -85,6 +142,21 @@ const loadingMore = ref(false);
 const endReached = ref(false);
 
 const PAGE_SIZE = 100;
+
+const unpushedCount = computed(
+  () => commits.value.filter((c) => c.is_pushed === false).length,
+);
+
+const { gridTemplate, beginResize, resetColumn } = useResizableColumns(
+  'gitdash:git-graph-panel-cols',
+  [
+    { id: 'msg', defaultTrack: 'minmax(0, 1fr)', min: 120, max: 800 },
+    { id: 'status', defaultTrack: 'auto', min: 56, max: 160 },
+    { id: 'author', defaultTrack: 'minmax(90px, max-content)', min: 64, max: 240 },
+    { id: 'date', defaultTrack: 'minmax(76px, max-content)', min: 64, max: 180 },
+    { id: 'id', defaultTrack: '64px', min: 56, max: 140 },
+  ],
+);
 
 const branchOptions = computed(() =>
   branches.value.map((b) => ({ label: b.display_name, value: b.name })),
@@ -190,10 +262,35 @@ onMounted(async () => {
   min-width: 0;
 }
 
+.git-rail-col {
+  padding: 0 2px;
+}
+.git-head-rail {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  height: 30px;
+  background-color: var(--background);
+  border-bottom: 1px solid var(--border);
+}
+.git-head {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  height: 30px;
+  display: grid;
+  align-items: center;
+  gap: 12px;
+  padding: 0 12px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--muted-foreground);
+  background-color: var(--background);
+  border-bottom: 1px solid var(--border);
+}
 .git-row {
   height: 28px;
   display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(90px, max-content) minmax(76px, max-content) 64px;
   align-items: center;
   gap: 12px;
   padding: 0 12px;
@@ -232,7 +329,7 @@ onMounted(async () => {
   color: var(--muted-foreground);
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
-  text-align: right;
+  text-align: left;
 }
 
 .git-hash {
@@ -240,7 +337,13 @@ onMounted(async () => {
   font-size: 11px;
   color: var(--muted-foreground);
   white-space: nowrap;
-  text-align: right;
+  text-align: left;
+}
+
+.git-badge-cell {
+  display: flex;
+  align-items: center;
+  min-width: 0;
 }
 
 .git-empty {

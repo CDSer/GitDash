@@ -6,6 +6,7 @@
 <template>
   <div class="flex h-full flex-col overflow-hidden">
     <header
+      v-if="!embedded"
       class="flex h-12 shrink-0 items-center justify-between border-b border-border bg-card px-4"
     >
       <div class="flex min-w-0 items-center gap-2">
@@ -65,46 +66,123 @@
         />
       </aside>
 
-      <!-- 中间提交列表 -->
+      <!-- 中间提交列表（Git 图 + 未推送标记） -->
       <main class="history-main">
-        <div v-if="loadingCommits" class="flex h-full items-center justify-center">
-          <Spinner size="lg" />
+        <div class="commit-toolbar">
+          <span class="commit-count">{{ commits.length }} 次提交</span>
+          <Tag v-if="unpushedCount > 0" variant="warning" class="commit-unpushed-tag">
+            {{ unpushedCount }} 条未推送
+          </Tag>
         </div>
-        <template v-else>
-          <div class="commit-scroll">
-            <div class="commit-table">
-              <div class="commit-head commit-cols">
-                <div>ID</div>
-                <div>提交信息</div>
-                <div>作者</div>
-                <div>时间</div>
-              </div>
-              <div class="commit-list">
-                <div
-                  v-for="commit in commits"
-                  :key="commit.id"
-                  :class="['commit-row commit-cols', selectedCommit?.id === commit.id ? 'commit-row--active' : '']"
-                  @click="handleCommitChange(commit)"
-                >
-                  <div class="commit-id font-mono">{{ commit.short_id }}</div>
-                  <div class="commit-msg" :title="commit.message">{{ firstLine(commit.message) }}</div>
-                  <div class="commit-author truncate">{{ commit.author }}</div>
-                  <div class="commit-date">{{ formatDate(commit.date) }}</div>
+        <div
+          class="commit-scroll relative"
+          @scroll="onCommitScroll"
+        >
+          <div class="commit-body flex min-h-0">
+            <div class="commit-rail-col shrink-0">
+              <div class="commit-head-rail" />
+              <GitGraphRail
+                :commits="commits"
+                :selected-id="selectedCommit?.id"
+                @select="onGraphSelect"
+              />
+            </div>
+            <div class="commit-list min-w-0 flex-1">
+              <div class="commit-head" :style="{ gridTemplateColumns: commitGridTemplate }">
+                <div class="col-th" data-col-id="msg" title="双击恢复默认宽度">
+                  <span class="truncate">提交信息</span>
+                  <span
+                    class="col-resize-handle"
+                    @pointerdown="beginCommitResize('msg', $event)"
+                    @dblclick.stop="resetCommitColumn('msg')"
+                  />
                 </div>
-                <Empty v-if="!commits.length" description="暂无提交记录" />
+                <div class="col-th" data-col-id="status" title="双击恢复默认宽度">
+                  <span>状态</span>
+                  <span
+                    class="col-resize-handle"
+                    @pointerdown="beginCommitResize('status', $event)"
+                    @dblclick.stop="resetCommitColumn('status')"
+                  />
+                </div>
+                <div class="col-th" data-col-id="author" title="双击恢复默认宽度">
+                  <span class="truncate">作者</span>
+                  <span
+                    class="col-resize-handle"
+                    @pointerdown="beginCommitResize('author', $event)"
+                    @dblclick.stop="resetCommitColumn('author')"
+                  />
+                </div>
+                <div class="col-th" data-col-id="date" title="双击恢复默认宽度">
+                  <span class="truncate">时间</span>
+                  <span
+                    class="col-resize-handle"
+                    @pointerdown="beginCommitResize('date', $event)"
+                    @dblclick.stop="resetCommitColumn('date')"
+                  />
+                </div>
+                <div class="col-th" data-col-id="id" title="双击恢复默认宽度">
+                  <span class="truncate">ID</span>
+                  <span
+                    class="col-resize-handle"
+                    @pointerdown="beginCommitResize('id', $event)"
+                    @dblclick.stop="resetCommitColumn('id')"
+                  />
+                </div>
               </div>
+              <div
+                v-for="commit in commits"
+                :key="commit.id"
+                :class="['commit-row', selectedCommit?.id === commit.id ? 'commit-row--active' : '']"
+                :style="{ gridTemplateColumns: commitGridTemplate }"
+                @click="handleCommitChange(commit)"
+              >
+                <div class="commit-msg" :title="commit.message">{{ firstLine(commit.message) }}</div>
+                <div class="commit-badge-cell">
+                  <Tag
+                    v-if="commit.is_pushed === false"
+                    variant="warning"
+                    title="尚未推送到远程"
+                  >
+                    未推送
+                  </Tag>
+                </div>
+                <span class="commit-author" :title="commit.author">{{ commit.author }}</span>
+                <span class="commit-date">{{ formatDate(commit.date) }}</span>
+                <span class="commit-id font-mono">{{ commit.short_id }}</span>
+              </div>
+              <div v-if="loadingMoreCommits" class="commit-foot">加载更多…</div>
+              <div v-else-if="endReached && commits.length" class="commit-foot commit-foot--muted">
+                已到历史开头
+              </div>
+              <Empty v-if="!commits.length && !loadingCommits" description="暂无提交记录" />
             </div>
           </div>
-        </template>
+          <div v-if="loadingCommits" class="commit-loading">
+            <Spinner size="lg" />
+          </div>
+        </div>
       </main>
 
-      <!-- 右侧详情 -->
-      <aside class="history-aside detail-aside">
-        <div class="aside-title">提交详情</div>
+      <!-- 右侧详情（默认收起，点击提交后展开） -->
+      <aside v-if="detailOpen" class="history-aside detail-aside">
+        <div class="aside-title">
+          <span>提交详情</span>
+          <Button variant="ghost" size="icon" class="detail-close" title="关闭" @click="closeDetail">
+            <X :size="14" />
+          </Button>
+        </div>
         <div v-if="detail" class="detail-scroll">
           <div class="detail-section">
             <div class="detail-label">提交信息</div>
             <div class="detail-message">{{ detail.message }}</div>
+            <Tag
+              v-if="selectedCommit && selectedCommit.is_pushed === false"
+              variant="warning"
+              class="detail-unpushed"
+            >
+              未推送到远程
+            </Tag>
           </div>
           <div v-if="detail.body" class="detail-section">
             <div class="detail-label">详细说明</div>
@@ -161,9 +239,20 @@
       <Empty description="项目不存在或已被移除" />
     </div>
 
-    <Dialog v-model="fileDiffVisible" :title="`文件改动 · ${fileDiffTitle}`" width="720px">
+    <Dialog
+      v-model="fileDiffVisible"
+      :title="`文件改动 · ${fileDiffTitle}`"
+      size="xl"
+      flush
+    >
       <div class="file-diff-box">
-        <DiffViewer :patch="fileDiffPatch" :is-binary="fileDiffBinary" empty-text="该文件无文本差异" />
+        <DiffViewer
+          :original="fileDiffOriginal"
+          :modified="fileDiffModified"
+          :patch="fileDiffPatch"
+          :is-binary="fileDiffBinary"
+          empty-text="该文件无文本差异"
+        />
       </div>
     </Dialog>
   </div>
@@ -171,9 +260,8 @@
 
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from 'vue';
-import { useRouter } from 'vue-router';
 import { open } from '@tauri-apps/plugin-shell';
-import { ArrowLeft, ExternalLink, GitCommitHorizontal, RefreshCw } from 'lucide-vue-next';
+import { ArrowLeft, ExternalLink, GitCommitHorizontal, RefreshCw, X } from 'lucide-vue-next';
 import type { Branch, Commit, CommitDetail, CommitFile } from '../types';
 import {
   getBranches,
@@ -183,6 +271,7 @@ import {
   gitCommitFileDiff,
 } from '../lib/tauriApi';
 import { useAppStore } from '../stores/appStore';
+import { useTabStore } from '../stores/tabStore';
 import Dialog from '../components/ui/Dialog.vue';
 import Tag from '../components/ui/Tag.vue';
 import Button from '../components/ui/Button.vue';
@@ -190,12 +279,18 @@ import Spinner from '../components/ui/Spinner.vue';
 import Empty from '../components/ui/Empty.vue';
 import Divider from '../components/ui/Divider.vue';
 import DiffViewer from '../components/Git/DiffViewer.vue';
+import GitGraphRail from '../components/Git/GitGraphRail.vue';
+import { useResizableColumns } from '../composables/useResizableColumns';
 import { toast } from '../lib/toast';
 
-const props = defineProps<{ projectId: string }>();
+const props = defineProps<{
+  projectId: string;
+  /** 标签页嵌入：隐藏页头「返回」 */
+  embedded?: boolean;
+}>();
 
 const appStore = useAppStore();
-const router = useRouter();
+const tabStore = useTabStore();
 
 const project = computed(() => appStore.projects.find((p) => p.id === props.projectId) ?? null);
 
@@ -204,15 +299,37 @@ const selectedBranch = ref('');
 const commits = ref<Commit[]>([]);
 const selectedCommit = ref<Commit | null>(null);
 const detail = ref<CommitDetail | null>(null);
+/** 提交详情栏：默认收起，点击提交后展开 */
+const detailOpen = ref(false);
 const loadingCommits = ref(false);
 const remoteUrl = ref<string | null>(null);
 const fileDiffVisible = ref(false);
+const fileDiffOriginal = ref('');
+const fileDiffModified = ref('');
 const fileDiffPatch = ref('');
 const fileDiffBinary = ref(false);
 const fileDiffTitle = ref('');
 
 const localBranches = computed(() => branches.value.filter((b) => b.is_local));
 const remoteBranches = computed(() => branches.value.filter((b) => b.is_remote));
+const unpushedCount = computed(
+  () => commits.value.filter((c) => c.is_pushed === false).length,
+);
+const loadingMoreCommits = ref(false);
+const endReached = ref(false);
+const PAGE_SIZE = 100;
+
+const {
+  gridTemplate: commitGridTemplate,
+  beginResize: beginCommitResize,
+  resetColumn: resetCommitColumn,
+} = useResizableColumns('gitdash:history-commit-cols', [
+  { id: 'msg', defaultTrack: 'minmax(0, 1fr)', min: 120, max: 800 },
+  { id: 'status', defaultTrack: 'auto', min: 56, max: 160 },
+  { id: 'author', defaultTrack: 'minmax(72px, max-content)', min: 64, max: 240 },
+  { id: 'date', defaultTrack: '76px', min: 64, max: 180 },
+  { id: 'id', defaultTrack: '64px', min: 56, max: 140 },
+]);
 
 // 观察项目实体：路由切换或 store 加载完成后（项目从无到有）都会重新加载
 watch(
@@ -223,7 +340,9 @@ watch(
     selectedBranch.value = '';
     selectedCommit.value = null;
     detail.value = null;
+    detailOpen.value = false;
     remoteUrl.value = null;
+    endReached.value = false;
     if (!p) return;
     // 清空分支后 loadBranches 会重新赋值，确保触发提交列表加载
     await Promise.all([loadBranches(), loadRemoteUrl()]);
@@ -308,11 +427,7 @@ const startBranchResize = beginResize('--history-branch-width', BRANCH_WIDTH_KEY
 const startDetailResize = beginResize('--history-detail-width', DETAIL_WIDTH_KEY, -1, DETAIL_DEFAULT);
 
 function goBack() {
-  if (window.history.length > 1) {
-    router.back();
-  } else {
-    router.push({ name: 'projects' });
-  }
+  tabStore.openProjectsTab();
 }
 
 async function reload() {
@@ -353,7 +468,9 @@ async function openFileDiff(f: CommitFile) {
       f.original_path ?? undefined,
     );
     fileDiffBinary.value = res.is_binary;
-    fileDiffPatch.value = res.fallback_patch || res.modified_content || '';
+    fileDiffOriginal.value = res.original_content;
+    fileDiffModified.value = res.modified_content;
+    fileDiffPatch.value = res.fallback_patch;
     fileDiffVisible.value = true;
   } catch (e) {
     console.error('加载文件 diff 失败：', e);
@@ -365,6 +482,7 @@ watch(selectedBranch, async (branch) => {
   if (!branch) return;
   selectedCommit.value = null;
   detail.value = null;
+  detailOpen.value = false;
   await loadCommits(branch);
 });
 
@@ -383,8 +501,10 @@ async function loadBranches() {
 async function loadCommits(branch: string) {
   if (!project.value) return;
   loadingCommits.value = true;
+  endReached.value = false;
   try {
-    commits.value = await getCommits(project.value.id, branch, 100);
+    commits.value = await getCommits(project.value.id, branch, PAGE_SIZE);
+    if (commits.value.length < PAGE_SIZE) endReached.value = true;
   } catch (error) {
     console.error('加载提交记录失败：', error);
     toast.error('加载提交记录失败');
@@ -393,13 +513,48 @@ async function loadCommits(branch: string) {
   }
 }
 
+async function loadMoreCommits() {
+  if (loadingMoreCommits.value || endReached.value || loadingCommits.value) return;
+  if (!selectedBranch.value || !project.value || !commits.value.length) return;
+  const last = commits.value[commits.value.length - 1];
+  loadingMoreCommits.value = true;
+  try {
+    const more = await getCommits(project.value.id, selectedBranch.value, PAGE_SIZE, last.id);
+    const seen = new Set(commits.value.map((c) => c.id));
+    for (const c of more) if (!seen.has(c.id)) commits.value.push(c);
+    if (more.length < PAGE_SIZE) endReached.value = true;
+  } catch (error) {
+    console.error('加载更多提交失败：', error);
+  } finally {
+    loadingMoreCommits.value = false;
+  }
+}
+
+function onCommitScroll(e: Event) {
+  const el = e.currentTarget as HTMLElement;
+  const remaining = el.scrollHeight - el.scrollTop - el.clientHeight;
+  if (remaining < 240) void loadMoreCommits();
+}
+
+function onGraphSelect(id: string) {
+  const commit = commits.value.find((c) => c.id === id);
+  if (commit) handleCommitChange(commit);
+}
+
 function selectBranch(branch: string) {
   selectedBranch.value = branch;
 }
 
 function handleCommitChange(commit: Commit) {
   selectedCommit.value = commit;
+  detailOpen.value = true;
   loadCommitDetail(commit.id);
+}
+
+function closeDetail() {
+  detailOpen.value = false;
+  selectedCommit.value = null;
+  detail.value = null;
 }
 
 async function loadCommitDetail(commitId: string) {
@@ -423,7 +578,11 @@ function pad(n: number): string {
 function formatDate(ts: number) {
   // 后端返回 unix 秒
   const d = new Date(ts * 1000);
-  return `${d.getFullYear()}/${pad(d.getMonth() + 1)}/${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
+  const now = new Date();
+  if (d.getFullYear() === now.getFullYear()) {
+    return `${pad(d.getMonth() + 1)}/${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
+  }
+  return `${d.getFullYear()}/${pad(d.getMonth() + 1)}/${pad(d.getDate())}`;
 }
 
 function statusVariant(status: string): 'success' | 'danger' | 'warning' | 'info' {
@@ -455,6 +614,9 @@ function statusVariant(status: string): 'success' | 'danger' | 'warning' | 'info
   border-left: 1px solid var(--border);
   width: var(--history-detail-width, 260px);
 }
+.detail-close {
+  margin-left: auto;
+}
 .history-resizer {
   position: absolute;
   top: 0;
@@ -476,7 +638,10 @@ function statusVariant(status: string): 'success' | 'danger' | 'warning' | 'info
   left: 0;
 }
 .aside-title {
-  padding: 10px 12px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 8px 6px 12px;
   font-size: 13px;
   font-weight: 600;
   border-bottom: 1px solid var(--border);
@@ -525,45 +690,63 @@ function statusVariant(status: string): 'success' | 'danger' | 'warning' | 'info
   display: flex;
   flex-direction: column;
 }
+.commit-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  height: 32px;
+  padding: 0 12px;
+  border-bottom: 1px solid var(--border);
+  flex-shrink: 0;
+  font-size: 12px;
+  color: var(--muted-foreground);
+}
 .commit-scroll {
   flex: 1;
   min-height: 0;
-  overflow-x: auto;
-  display: flex;
-  flex-direction: column;
+  overflow-y: auto;
+  overflow-x: hidden;
 }
-.commit-table {
-  flex: 1;
-  min-height: 0;
+.commit-body {
   min-width: 640px;
-  display: flex;
-  flex-direction: column;
+  padding-bottom: 20px;
 }
-.commit-cols {
-  grid-template-columns: 80px minmax(240px, 1fr) 110px 150px;
+.commit-rail-col {
+  padding: 0 2px;
+  border-right: 1px solid var(--border);
+}
+.commit-head-rail {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  height: 30px;
+  background-color: var(--background);
+  border-bottom: 1px solid var(--border);
+}
+.commit-list {
+  min-width: 0;
 }
 .commit-head {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  height: 30px;
   display: grid;
   align-items: center;
   gap: 8px;
-  padding: 8px 12px;
+  padding: 0 12px;
   font-size: 12px;
   font-weight: 600;
   color: var(--muted-foreground);
+  background-color: var(--background);
   border-bottom: 1px solid var(--border);
-  flex-shrink: 0;
-  width: 100%;
-}
-.commit-list {
-  flex: 1;
-  overflow-y: auto;
-  min-height: 0;
 }
 .commit-row {
+  height: 28px;
   display: grid;
   align-items: center;
   gap: 8px;
-  padding: 8px 12px;
+  padding: 0 12px;
   font-size: 13px;
   border-bottom: 1px solid var(--border);
   cursor: pointer;
@@ -577,21 +760,53 @@ function statusVariant(status: string): 'success' | 'danger' | 'warning' | 'info
 }
 .commit-id {
   color: var(--muted-foreground);
+  font-size: 11px;
+  white-space: nowrap;
+  text-align: left;
 }
 .commit-msg {
+  font-size: 13px;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+  min-width: 0;
+}
+.commit-badge-cell {
+  display: flex;
+  align-items: center;
+  min-width: 0;
 }
 .commit-author {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
   color: var(--muted-foreground);
+  font-size: 11px;
+  min-width: 0;
 }
 .commit-date {
   color: var(--muted-foreground);
   font-variant-numeric: tabular-nums;
+  font-size: 11px;
+  white-space: nowrap;
+  text-align: left;
+}
+.commit-foot {
+  padding: 10px 12px;
+  text-align: center;
+  font-size: 12px;
+  color: var(--muted-foreground);
+}
+.commit-foot--muted {
+  opacity: 0.7;
+}
+.commit-loading {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background-color: color-mix(in oklab, var(--background) 70%, transparent);
 }
 .detail-scroll {
   flex: 1;
@@ -614,6 +829,9 @@ function statusVariant(status: string): 'success' | 'danger' | 'warning' | 'info
   font-size: 13px;
   font-weight: 600;
   word-break: break-word;
+}
+.detail-unpushed {
+  margin-top: 8px;
 }
 .detail-value {
   font-size: 13px;
@@ -673,6 +891,8 @@ function statusVariant(status: string): 'success' | 'danger' | 'warning' | 'info
   margin-top: 6px;
 }
 .file-diff-box {
-  height: 520px;
+  flex: 1;
+  min-height: 0;
+  height: 100%;
 }
 </style>

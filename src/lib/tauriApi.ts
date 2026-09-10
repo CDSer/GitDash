@@ -6,13 +6,17 @@ import type {
   AppConfig,
   Project,
   Group,
-  GitResult,
+  ProjectGitResult,
   ProjectStatus,
   Branch,
   Commit,
   CommitDetail,
   CommitFile,
+  ConflictFileContent,
+  ConflictSide,
   FileNode,
+  InProgressOp,
+  MergeResult,
   Settings,
   GitCommitResult,
   GitDiffContentResult,
@@ -138,24 +142,24 @@ export async function getProjectStatus(
  * 批量 Pull 操作
  * @param projectIds 项目 ID 列表
  */
-export async function batchPull(projectIds: string[]): Promise<GitResult[]> {
-  return invoke<GitResult[]>('batch_pull', { projectIds });
+export async function batchPull(projectIds: string[]): Promise<ProjectGitResult[]> {
+  return invoke<ProjectGitResult[]>('batch_pull', { projectIds });
 }
 
 /**
  * 批量 Fetch 操作
  * @param projectIds 项目 ID 列表
  */
-export async function batchFetch(projectIds: string[]): Promise<GitResult[]> {
-  return invoke<GitResult[]>('batch_fetch', { projectIds });
+export async function batchFetch(projectIds: string[]): Promise<ProjectGitResult[]> {
+  return invoke<ProjectGitResult[]>('batch_fetch', { projectIds });
 }
 
 /**
  * 批量 Push 操作
  * @param projectIds 项目 ID 列表
  */
-export async function batchPush(projectIds: string[]): Promise<GitResult[]> {
-  return invoke<GitResult[]>('batch_push', { projectIds });
+export async function batchPush(projectIds: string[]): Promise<ProjectGitResult[]> {
+  return invoke<ProjectGitResult[]>('batch_push', { projectIds });
 }
 
 /**
@@ -232,6 +236,73 @@ export async function gitDiscard(projectId: string, entries: DiscardEntry[]): Pr
  */
 export async function gitCommit(projectId: string, message: string): Promise<GitCommitResult> {
   return invoke<GitCommitResult>('git_commit', { projectId, message });
+}
+
+/**
+ * 查询进行中的 merge / rebase / cherry-pick / revert
+ */
+export async function gitInProgress(projectId: string): Promise<InProgressOp | null> {
+  return invoke<InProgressOp | null>('git_in_progress', { projectId });
+}
+
+/**
+ * 发起合并
+ * @param branch 目标分支名
+ */
+export async function gitMerge(projectId: string, branch: string): Promise<MergeResult> {
+  return invoke<MergeResult>('git_merge', { projectId, branch });
+}
+
+/**
+ * 中止进行中的 merge / rebase / cherry-pick / revert
+ */
+export async function gitAbortOperation(projectId: string): Promise<void> {
+  return invoke('git_abort_operation', { projectId });
+}
+
+/**
+ * 继续进行中的合并/变基（需已解决全部冲突）
+ * @param message 可选提交信息（仅 merge 使用）
+ */
+export async function gitMergeContinue(
+  projectId: string,
+  message?: string
+): Promise<GitCommitResult> {
+  return invoke<GitCommitResult>('git_merge_continue', {
+    projectId,
+    message: message ?? null,
+  });
+}
+
+/**
+ * 采纳一侧解决冲突（ours / theirs）并自动 add
+ */
+export async function gitResolveConflict(
+  projectId: string,
+  paths: string[],
+  side: ConflictSide
+): Promise<void> {
+  return invoke('git_resolve_conflict', { projectId, paths, side });
+}
+
+/**
+ * 手动编辑后标记冲突已解决（git add）
+ */
+export async function gitMarkConflictResolved(
+  projectId: string,
+  paths: string[]
+): Promise<void> {
+  return invoke('git_mark_conflict_resolved', { projectId, paths });
+}
+
+/**
+ * 读取冲突文件三路内容（base / ours / theirs）
+ */
+export async function gitConflictFileContent(
+  projectId: string,
+  path: string
+): Promise<ConflictFileContent> {
+  return invoke<ConflictFileContent>('git_conflict_file_content', { projectId, path });
 }
 
 /**
@@ -341,4 +412,44 @@ export async function readFile(path: string): Promise<string> {
  */
 export async function writeFile(path: string, content: string): Promise<void> {
   return invoke('write_file', { path, content });
+}
+
+/**
+ * 打开（或复用）项目终端会话
+ * @param projectId 项目 ID
+ * @param cols 列数
+ * @param rows 行数
+ * @returns 可回放的历史输出（base64）
+ */
+export async function terminalOpen(
+  projectId: string,
+  cols: number,
+  rows: number
+): Promise<string> {
+  return invoke<string>('terminal_open', { projectId, cols, rows });
+}
+
+/**
+ * 向终端写入用户输入
+ */
+export async function terminalWrite(projectId: string, data: string): Promise<void> {
+  return invoke('terminal_write', { projectId, data });
+}
+
+/**
+ * 调整终端尺寸
+ */
+export async function terminalResize(
+  projectId: string,
+  cols: number,
+  rows: number
+): Promise<void> {
+  return invoke('terminal_resize', { projectId, cols, rows });
+}
+
+/**
+ * 关闭终端会话（杀掉 shell 进程）
+ */
+export async function terminalClose(projectId: string): Promise<void> {
+  return invoke('terminal_close', { projectId });
 }

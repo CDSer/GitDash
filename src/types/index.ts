@@ -44,6 +44,10 @@ export interface ProjectStatus {
   is_clean: boolean;
   is_detached: boolean;
   changed_files: ChangedFile[];
+  /** 进行中的 merge / rebase / cherry-pick / revert */
+  in_progress: InProgressOp | null;
+  /** 未解决冲突文件数 */
+  conflict_count: number;
   last_fetched: number | null;
   is_fetching: boolean;
   error: string | null;
@@ -56,6 +60,36 @@ export interface ChangedFile {
   index_status: string;
   worktree_status: string;
   staged: boolean;
+  /** 未合并冲突文件 */
+  is_conflict?: boolean;
+}
+
+/** 进行中的 Git 操作 */
+export interface InProgressOp {
+  kind: 'merge' | 'rebase' | 'cherry-pick' | 'revert' | string;
+  head_message: string | null;
+}
+
+/** 冲突文件三路内容 */
+export interface ConflictFileContent {
+  path: string;
+  base: string;
+  ours: string;
+  theirs: string;
+  exists_base: boolean;
+  exists_ours: boolean;
+  exists_theirs: boolean;
+  is_binary: boolean;
+}
+
+/** 采纳一侧解决冲突 */
+export type ConflictSide = 'ours' | 'theirs';
+
+/** 发起合并 / 继续合并结果 */
+export interface MergeResult {
+  success: boolean;
+  has_conflicts: boolean;
+  message: string;
 }
 
 export interface GitResult {
@@ -67,6 +101,8 @@ export interface GitResult {
 
 export interface OperationEvent {
   task_id: string;
+  /** 关联项目 ID，用于匹配任务行 */
+  project_id: string;
   status: string;
   message: string | null;
 }
@@ -79,6 +115,15 @@ export interface OperationTask {
   status: 'pending' | 'running' | 'success' | 'error';
   message?: string;
   createdAt: number;
+}
+
+/** 带项目 ID 的批量 Git 结果 */
+export interface ProjectGitResult {
+  project_id: string;
+  success: boolean;
+  stdout: string;
+  stderr: string;
+  duration_ms: number;
 }
 
 /** Git 分支 */
@@ -102,6 +147,8 @@ export interface Commit {
   email: string;
   date: number;
   parents: string[];
+  /** 是否已推送到上游（无上游时为 true） */
+  is_pushed?: boolean;
 }
 
 /** 提交中的文件改动（含增删行数与改名） */

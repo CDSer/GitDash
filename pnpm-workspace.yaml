@@ -1,3 +1,2 @@
-packages:
-  - .
-  - src-tauri
+allowBuilds:
+  vue-demi: true

@@ -1,9 +1,8 @@
 // Git 执行器模块
 // 负责执行 Git 命令、解析状态、并发控制
 
-use crate::models::{ChangedFile, GitResult, ProjectStatus};
+use crate::models::{ChangedFile, GitResult, InProgressOp, ProjectStatus};
 use parking_lot::Mutex;
-use std::collections::HashMap;
 use std::sync::Arc;
 use std::time::Instant;
 use tokio::process::Command;
@@ -16,27 +15,34 @@ use std::os::windows::process::CommandExt;
 /// 支持并发控制和超时机制
 pub struct GitExecutor {
     /// 并发信号量，限制同时执行的 Git 命令数量
-    semaphore: Arc<Semaphore>,
+    semaphore: Mutex<Arc<Semaphore>>,
     /// 自定义 Git 可执行文件路径
     git_path: Mutex<Option<String>>,
 }
 
 impl GitExecutor {
     /// 创建新的 Git 执行器
-    /// 
+    ///
     /// # Arguments
     /// * `max_concurrent` - 最大并发数
     pub fn new(max_concurrent: usize) -> Self {
         Self {
-            semaphore: Arc::new(Semaphore::new(max_concurrent)),
+            semaphore: Mutex::new(Arc::new(Semaphore::new(max_concurrent.max(1)))),
             git_path: Mutex::new(None),
         }
     }
 
-    /// 设置 Git 可执行文件路径
-    pub fn set_git_path(&self, path: String) {
+    /// 设置 Git 可执行文件路径（None 表示回退到 PATH 中的 git）
+    pub fn set_git_path(&self, path: Option<String>) {
         let mut git_path = self.git_path.lock();
-        *git_path = Some(path);
+        *git_path = path;
+    }
+
+    /// 更新最大并发数（替换信号量；进行中的命令仍受旧限制约束）
+    pub fn set_max_concurrent(&self, max_concurrent: usize) {
+        let max_concurrent = max_concurrent.max(1);
+        let mut sem = self.semaphore.lock();
+        *sem = Arc::new(Semaphore::new(max_concurrent));
     }
 
     /// 执行 Git 命令
@@ -48,8 +54,9 @@ impl GitExecutor {
     /// # Returns
     /// GitResult - 执行结果
     pub async fn exec(&self, repo_path: &str, args: &[&str]) -> GitResult {
-        // 获取信号量许可，限制并发
-        let _permit = self.semaphore.acquire().await.unwrap();
+        // 获取信号量许可，限制并发（克隆 Arc，避免跨 await 持锁）
+        let semaphore = self.semaphore.lock().clone();
+        let _permit = semaphore.acquire().await.unwrap();
         
         let start = Instant::now();
         let mut cmd = self.create_command(repo_path);
@@ -93,15 +100,20 @@ impl GitExecutor {
     }
 
     /// 获取项目 Git 状态
-    /// 
+    ///
     /// # Arguments
     /// * `repo_path` - 仓库路径
-    /// 
+    ///
     /// # Returns
     /// ProjectStatus - 项目状态
     pub async fn status(&self, repo_path: &str) -> ProjectStatus {
-        let result = self.exec(repo_path, &["status", "--porcelain", "-b", "--untracked-files=all"]).await;
-        
+        let result = self
+            .exec(
+                repo_path,
+                &["status", "--porcelain", "-b", "--untracked-files=all"],
+            )
+            .await;
+
         if !result.success {
             return ProjectStatus {
                 project_id: String::new(),
@@ -114,17 +126,88 @@ impl GitExecutor {
                 is_clean: false,
                 is_detached: false,
                 changed_files: Vec::new(),
+                in_progress: Self::detect_in_progress_op(repo_path),
+                conflict_count: 0,
                 last_fetched: None,
                 is_fetching: false,
                 error: Some(result.stderr),
             };
         }
-        
-        self.parse_status_output(&result.stdout)
+
+        self.parse_status_output(&result.stdout, repo_path)
     }
 
-    /// 解析 git status 输出（porcelain v1，含逐文件改动与 detached 状态）
-    fn parse_status_output(&self, output: &str) -> ProjectStatus {
+    /// 检测进行中的 merge / rebase / cherry-pick / revert
+    pub fn detect_in_progress_op(repo_path: &str) -> Option<InProgressOp> {
+        let git_dir = {
+            let mut cmd = std::process::Command::new("git");
+            cmd.current_dir(repo_path)
+                .args(["rev-parse", "--absolute-git-dir"])
+                .env("GIT_TERMINAL_PROMPT", "0");
+            #[cfg(windows)]
+            {
+                use std::os::windows::process::CommandExt;
+                cmd.creation_flags(0x08000000);
+            }
+            let out = cmd.output().ok()?;
+            if !out.status.success() {
+                return None;
+            }
+            String::from_utf8_lossy(&out.stdout).trim().to_string()
+        };
+
+        let git_dir_path = std::path::Path::new(&git_dir);
+        let read_head_msg = |file: &str| -> Option<String> {
+            let p = git_dir_path.join(file);
+            let content = std::fs::read_to_string(p).ok()?;
+            let line = content.lines().next()?.trim().to_string();
+            if line.is_empty() {
+                None
+            } else {
+                Some(line)
+            }
+        };
+
+        // rebase 优先看目录（interactive / apply 两种形态）
+        if git_dir_path.join("rebase-merge").is_dir() || git_dir_path.join("rebase-apply").is_dir()
+        {
+            let msg = read_head_msg("rebase-merge/message").or_else(|| {
+                std::fs::read_to_string(git_dir_path.join("rebase-apply/subject"))
+                    .ok()
+                    .map(|s| s.trim().to_string())
+            });
+            return Some(InProgressOp {
+                kind: "rebase".into(),
+                head_message: msg,
+            });
+        }
+
+        if git_dir_path.join("CHERRY_PICK_HEAD").exists() {
+            return Some(InProgressOp {
+                kind: "cherry-pick".into(),
+                head_message: read_head_msg("CHERRY_PICK_HEAD"),
+            });
+        }
+
+        if git_dir_path.join("REVERT_HEAD").exists() {
+            return Some(InProgressOp {
+                kind: "revert".into(),
+                head_message: read_head_msg("REVERT_HEAD"),
+            });
+        }
+
+        if git_dir_path.join("MERGE_HEAD").exists() {
+            return Some(InProgressOp {
+                kind: "merge".into(),
+                head_message: read_head_msg("MERGE_MSG"),
+            });
+        }
+
+        None
+    }
+
+    /// 解析 git status 输出（porcelain v1，含冲突 / 逐文件改动 / detached）
+    fn parse_status_output(&self, output: &str, repo_path: &str) -> ProjectStatus {
         let mut branch = String::new();
         let mut ahead = 0u32;
         let mut behind = 0u32;
@@ -132,6 +215,7 @@ impl GitExecutor {
         let mut modified = 0u32;
         let mut staged = 0u32;
         let mut untracked = 0u32;
+        let mut conflict_count = 0u32;
         let mut changed_files: Vec<ChangedFile> = Vec::new();
 
         let lines: Vec<&str> = output.lines().collect();
@@ -166,7 +250,10 @@ impl GitExecutor {
             {
                 let (old, new): (&str, &str) = if rest.contains('\t') {
                     let parts: Vec<&str> = rest.split('\t').collect();
-                    (parts.first().copied().unwrap_or(""), parts.get(1).copied().unwrap_or(""))
+                    (
+                        parts.first().copied().unwrap_or(""),
+                        parts.get(1).copied().unwrap_or(""),
+                    )
                 } else if let Some(pos) = rest.find(" -> ") {
                     let (o, n) = rest.split_at(pos);
                     (o.trim(), n[4..].trim()) // " -> " 长度为 4
@@ -181,6 +268,21 @@ impl GitExecutor {
             } else {
                 (rest.to_string(), None)
             };
+
+            let is_conflict = Self::is_conflict_pair(index_status, worktree_status);
+            if is_conflict {
+                conflict_count += 1;
+                // 冲突文件不计入普通 staged/modified，由冲突区单独展示
+                changed_files.push(ChangedFile {
+                    path,
+                    original_path,
+                    index_status: index_status.to_string(),
+                    worktree_status: worktree_status.to_string(),
+                    staged: false,
+                    is_conflict: true,
+                });
+                continue;
+            }
 
             let is_staged = index_status != " " && index_status != "?";
             if is_staged {
@@ -199,10 +301,13 @@ impl GitExecutor {
                 index_status: index_status.to_string(),
                 worktree_status: worktree_status.to_string(),
                 staged: is_staged,
+                is_conflict: false,
             });
         }
 
-        let is_clean = modified == 0 && staged == 0 && untracked == 0;
+        let is_clean =
+            modified == 0 && staged == 0 && untracked == 0 && conflict_count == 0;
+        let in_progress = Self::detect_in_progress_op(repo_path);
 
         ProjectStatus {
             project_id: String::new(),
@@ -215,10 +320,18 @@ impl GitExecutor {
             is_clean,
             is_detached,
             changed_files,
+            in_progress,
+            conflict_count,
             last_fetched: None,
             is_fetching: false,
             error: None,
         }
+    }
+
+    /// porcelain XY 是否为未合并冲突组合
+    fn is_conflict_pair(x: &str, y: &str) -> bool {
+        // UU AA DD AU UA DU UD
+        x == "U" || y == "U" || (x == "A" && y == "A") || (x == "D" && y == "D")
     }
 
     /// 解析分支行
@@ -287,49 +400,94 @@ impl GitExecutor {
         // 禁止交互式提示
         cmd.env("GIT_TERMINAL_PROMPT", "0");
         cmd.env("GIT_SSH_COMMAND", "ssh -o BatchMode=yes");
+        // 避免 rebase/cherry-pick --continue 弹出编辑器卡住
+        cmd.env("GIT_EDITOR", "true");
+        cmd.env("EDITOR", "true");
+        cmd.env("VISUAL", "true");
 
         cmd
     }
 }
 
-/// 状态缓存（带 TTL）
-pub struct StatusCache {
-    cache: Mutex<HashMap<String, (ProjectStatus, std::time::Instant)>>,
-    ttl: std::time::Duration,
-}
+#[cfg(test)]
+mod tests {
+    use super::*;
 
-impl StatusCache {
-    /// 创建新的状态缓存
-    /// 
-    /// # Arguments
-    /// * `ttl_seconds` - 缓存有效期（秒）
-    pub fn new(ttl_seconds: u64) -> Self {
-        Self {
-            cache: Mutex::new(HashMap::new()),
-            ttl: std::time::Duration::from_secs(ttl_seconds),
-        }
+    #[test]
+    fn conflict_pairs_detected() {
+        assert!(GitExecutor::is_conflict_pair("U", "U"));
+        assert!(GitExecutor::is_conflict_pair("A", "A"));
+        assert!(GitExecutor::is_conflict_pair("D", "D"));
+        assert!(GitExecutor::is_conflict_pair("A", "U"));
+        assert!(GitExecutor::is_conflict_pair("U", "A"));
+        assert!(GitExecutor::is_conflict_pair("D", "U"));
+        assert!(GitExecutor::is_conflict_pair("U", "D"));
+        assert!(!GitExecutor::is_conflict_pair("M", "M"));
+        assert!(!GitExecutor::is_conflict_pair(" ", "M"));
+        assert!(!GitExecutor::is_conflict_pair("?", "?"));
+        assert!(!GitExecutor::is_conflict_pair("A", " "));
+        assert!(!GitExecutor::is_conflict_pair("R", "M"));
     }
 
-    /// 获取缓存的状态
-    pub fn get(&self, project_id: &str) -> Option<ProjectStatus> {
-        let cache = self.cache.lock();
-        if let Some((status, timestamp)) = cache.get(project_id) {
-            if timestamp.elapsed() < self.ttl {
-                return Some(status.clone());
-            }
-        }
-        None
+    #[test]
+    fn parse_status_counts_and_conflicts() {
+        let git = GitExecutor::new(1);
+        let output = "\
+## main...origin/main [ahead 2, behind 1]
+ M src/app.ts
+A  src/new.ts
+?? src/untracked.ts
+UU src/conflict.ts
+";
+        // 仓库路径不存在时 detect_in_progress 返回 None，可专注解析
+        let status = git.parse_status_output(output, "/nonexistent/repo");
+        assert_eq!(status.branch, "main");
+        assert_eq!(status.ahead, 2);
+        assert_eq!(status.behind, 1);
+        assert_eq!(status.modified, 1);
+        assert_eq!(status.staged, 1);
+        assert_eq!(status.untracked, 1);
+        assert_eq!(status.conflict_count, 1);
+        assert!(!status.is_clean);
+
+        let conflict = status
+            .changed_files
+            .iter()
+            .find(|f| f.path == "src/conflict.ts")
+            .expect("conflict file");
+        assert!(conflict.is_conflict);
+        assert_eq!(conflict.index_status, "U");
+        assert_eq!(conflict.worktree_status, "U");
+
+        let app = status
+            .changed_files
+            .iter()
+            .find(|f| f.path == "src/app.ts")
+            .expect("app.ts");
+        assert!(!app.is_conflict);
+        assert!(!app.staged);
     }
 
-    /// 设置缓存
-    pub fn set(&self, project_id: String, status: ProjectStatus) {
-        let mut cache = self.cache.lock();
-        cache.insert(project_id, (status, std::time::Instant::now()));
+    #[test]
+    fn parse_status_clean() {
+        let git = GitExecutor::new(1);
+        let status = git.parse_status_output("## main\n", "/nonexistent/repo");
+        assert!(status.is_clean);
+        assert_eq!(status.conflict_count, 0);
+        assert!(status.changed_files.is_empty());
     }
 
-    /// 使缓存失效
-    pub fn invalidate(&self, project_id: &str) {
-        let mut cache = self.cache.lock();
-        cache.remove(project_id);
+    #[test]
+    fn parse_status_rename_with_arrow() {
+        let git = GitExecutor::new(1);
+        let output = "\
+## main
+R  old.ts -> new.ts
+";
+        let status = git.parse_status_output(output, "/nonexistent/repo");
+        let file = &status.changed_files[0];
+        assert_eq!(file.path, "new.ts");
+        assert_eq!(file.original_path.as_deref(), Some("old.ts"));
+        assert!(file.staged);
     }
 }
