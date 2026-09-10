@@ -24,7 +24,8 @@ export const useAppStore = defineStore('app', () => {
   const groups = ref<Group[]>([]);
   const settings = ref<Settings>({
     git_path: null,
-    auto_fetch_interval: 30,
+    // 0 = 关闭自动 fetch；默认 10 分钟
+    auto_fetch_interval: 600,
     max_concurrent_git: 3,
     theme: 'system',
     global_shortcut: 'CommandOrControl+Shift+G',

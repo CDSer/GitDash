@@ -408,3 +408,86 @@ impl GitExecutor {
         cmd
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn conflict_pairs_detected() {
+        assert!(GitExecutor::is_conflict_pair("U", "U"));
+        assert!(GitExecutor::is_conflict_pair("A", "A"));
+        assert!(GitExecutor::is_conflict_pair("D", "D"));
+        assert!(GitExecutor::is_conflict_pair("A", "U"));
+        assert!(GitExecutor::is_conflict_pair("U", "A"));
+        assert!(GitExecutor::is_conflict_pair("D", "U"));
+        assert!(GitExecutor::is_conflict_pair("U", "D"));
+        assert!(!GitExecutor::is_conflict_pair("M", "M"));
+        assert!(!GitExecutor::is_conflict_pair(" ", "M"));
+        assert!(!GitExecutor::is_conflict_pair("?", "?"));
+        assert!(!GitExecutor::is_conflict_pair("A", " "));
+        assert!(!GitExecutor::is_conflict_pair("R", "M"));
+    }
+
+    #[test]
+    fn parse_status_counts_and_conflicts() {
+        let git = GitExecutor::new(1);
+        let output = "\
+## main...origin/main [ahead 2, behind 1]
+ M src/app.ts
+A  src/new.ts
+?? src/untracked.ts
+UU src/conflict.ts
+";
+        // 仓库路径不存在时 detect_in_progress 返回 None，可专注解析
+        let status = git.parse_status_output(output, "/nonexistent/repo");
+        assert_eq!(status.branch, "main");
+        assert_eq!(status.ahead, 2);
+        assert_eq!(status.behind, 1);
+        assert_eq!(status.modified, 1);
+        assert_eq!(status.staged, 1);
+        assert_eq!(status.untracked, 1);
+        assert_eq!(status.conflict_count, 1);
+        assert!(!status.is_clean);
+
+        let conflict = status
+            .changed_files
+            .iter()
+            .find(|f| f.path == "src/conflict.ts")
+            .expect("conflict file");
+        assert!(conflict.is_conflict);
+        assert_eq!(conflict.index_status, "U");
+        assert_eq!(conflict.worktree_status, "U");
+
+        let app = status
+            .changed_files
+            .iter()
+            .find(|f| f.path == "src/app.ts")
+            .expect("app.ts");
+        assert!(!app.is_conflict);
+        assert!(!app.staged);
+    }
+
+    #[test]
+    fn parse_status_clean() {
+        let git = GitExecutor::new(1);
+        let status = git.parse_status_output("## main\n", "/nonexistent/repo");
+        assert!(status.is_clean);
+        assert_eq!(status.conflict_count, 0);
+        assert!(status.changed_files.is_empty());
+    }
+
+    #[test]
+    fn parse_status_rename_with_arrow() {
+        let git = GitExecutor::new(1);
+        let output = "\
+## main
+R  old.ts -> new.ts
+";
+        let status = git.parse_status_output(output, "/nonexistent/repo");
+        let file = &status.changed_files[0];
+        assert_eq!(file.path, "new.ts");
+        assert_eq!(file.original_path.as_deref(), Some("old.ts"));
+        assert!(file.staged);
+    }
+}

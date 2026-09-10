@@ -37,7 +37,7 @@
           variant="ghost"
           :disabled="busy || !!inProgress"
           title="合并选中分支到当前分支"
-          @click="onMergeSelected"
+          @click="showMergeModal = true"
         >
           合并…
         </Button>
@@ -217,6 +217,13 @@
       </div>
     </div>
     <div v-else class="sc-empty"><Spinner /></div>
+    <MergeBranchModal
+      v-model="showMergeModal"
+      :project="project"
+      :branches="localBranches"
+      :current-branch="status?.branch ?? ''"
+      @merged="onMerged"
+    />
   </Dialog>
 </template>
 
@@ -243,7 +250,6 @@ import {
   gitDiff,
   gitDiscard,
   gitMarkConflictResolved,
-  gitMerge,
   gitMergeContinue,
   gitRemoteUrl,
   gitResolveConflict,
@@ -258,6 +264,7 @@ import Empty from '../ui/Empty.vue';
 import Spinner from '../ui/Spinner.vue';
 import DiffViewer from '../Git/DiffViewer.vue';
 import ConflictViewer from '../Git/ConflictViewer.vue';
+import MergeBranchModal from './MergeBranchModal.vue';
 import { GitBranch, RefreshCw } from 'lucide-vue-next';
 import { toast } from '../../lib/toast';
 
@@ -270,7 +277,7 @@ const remoteUrl = ref<string | null>(null);
 const busy = ref(false);
 const selectedFile = ref<ChangedFile | null>(null);
 const commitMessage = ref('');
-const mergeTarget = ref<string | null>(null);
+const showMergeModal = ref(false);
 
 const diffPatch = ref('');
 const diffIsBinary = ref(false);
@@ -624,36 +631,8 @@ async function abortOperation() {
   }
 }
 
-function onMergeSelected() {
-  const other = localBranches.value.filter((b) => !b.is_current);
-  if (!other.length) {
-    toast.error('没有可合并的本地分支');
-    return;
-  }
-  const names = other.map((b, i) => `${i + 1}. ${b.display_name}`).join('\n');
-  const pick = prompt(`输入要合并到当前分支的分支名：\n${names}`);
-  if (!pick) return;
-  mergeTarget.value = pick.trim();
-  void runMerge();
-}
-
-async function runMerge() {
-  if (!props.project || !mergeTarget.value) return;
-  busy.value = true;
-  try {
-    const res = await gitMerge(props.project.id, mergeTarget.value);
-    if (res.has_conflicts) {
-      toast.error('合并存在冲突，请在左侧解决');
-    } else {
-      toast.success(res.message || '合并成功');
-    }
-    mergeTarget.value = null;
-    await refresh();
-  } catch (e) {
-    toast.error(typeof e === 'string' ? e : '合并失败');
-  } finally {
-    busy.value = false;
-  }
+function onMerged() {
+  void refresh();
 }
 
 async function onCheckout(e: Event) {

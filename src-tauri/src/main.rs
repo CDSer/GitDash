@@ -61,16 +61,19 @@ fn main() {
             // 设置系统托盘
             let quit_i = MenuItem::with_id(app, "quit", "退出", true, None::<&str>)?;
             let show_i = MenuItem::with_id(app, "show", "显示窗口", true, None::<&str>)?;
+            let fetch_all_i =
+                MenuItem::with_id(app, "fetch_all", "立即获取全部 (Fetch)", true, None::<&str>)?;
             #[cfg(debug_assertions)]
             let devtools_i = MenuItem::with_id(app, "devtools", "打开开发者工具", true, None::<&str>)?;
             #[cfg(debug_assertions)]
-            let menu = Menu::with_items(app, &[&show_i, &devtools_i, &quit_i])?;
+            let menu = Menu::with_items(app, &[&show_i, &fetch_all_i, &devtools_i, &quit_i])?;
             #[cfg(not(debug_assertions))]
-            let menu = Menu::with_items(app, &[&show_i, &quit_i])?;
+            let menu = Menu::with_items(app, &[&show_i, &fetch_all_i, &quit_i])?;
 
-            let _tray = TrayIconBuilder::new()
+            let _tray = TrayIconBuilder::with_id("main-tray")
                 .icon(app.default_window_icon().unwrap().clone())
                 .menu(&menu)
+                .tooltip("GitDash")
                 .show_menu_on_left_click(true)
                 .on_menu_event(move |app, event| match event.id.as_ref() {
                     "quit" => {
@@ -81,6 +84,12 @@ fn main() {
                             let _ = window.show();
                             let _ = window.set_focus();
                         }
+                    }
+                    "fetch_all" => {
+                        let handle = app.clone();
+                        tauri::async_runtime::spawn(async move {
+                            fetch_all_projects(&handle).await;
+                        });
                     }
                     "devtools" => {
                         gitdash_lib::commands::toggle_devtools(app.clone());
@@ -113,7 +122,7 @@ fn main() {
                 groups: Vec::new(),
                 settings: Settings {
                     git_path: None,
-                    auto_fetch_interval: 30,
+                    auto_fetch_interval: 600,
                     max_concurrent_git: 3,
                     theme: "system".to_string(),
                     global_shortcut: "CommandOrControl+Shift+G".to_string(),
@@ -154,9 +163,23 @@ async fn auto_fetch_loop(app_handle: tauri::AppHandle) {
         // 先 sleep，避免启动瞬间打满远端
         tokio::time::sleep(std::time::Duration::from_secs(interval)).await;
 
+        fetch_paths_now(&app_handle, &project_paths).await;
+    }
+}
+
+/// 托盘「立即获取全部」：对当前全部项目 fetch
+async fn fetch_all_projects(app_handle: &tauri::AppHandle) {
+    let paths: Vec<String> = {
         let state = app_handle.state::<AppState>();
-        for path in project_paths {
-            let _ = state.git.exec(&path, &["fetch", "--prune", "--all"]).await;
-        }
+        let config = state.config.read();
+        config.projects.iter().map(|p| p.path.clone()).collect()
+    };
+    fetch_paths_now(app_handle, &paths).await;
+}
+
+async fn fetch_paths_now(app_handle: &tauri::AppHandle, paths: &[String]) {
+    let state = app_handle.state::<AppState>();
+    for path in paths {
+        let _ = state.git.exec(path, &["fetch", "--prune", "--all"]).await;
     }
 }

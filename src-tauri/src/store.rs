@@ -172,7 +172,8 @@ impl AppState {
             groups: vec![],
             settings: Settings {
                 git_path: None,
-                auto_fetch_interval: 30,
+                // 0 = 关闭；默认 10 分钟
+                auto_fetch_interval: 600,
                 max_concurrent_git: 3,
                 theme: "system".to_string(),
                 global_shortcut: "CommandOrControl+Shift+G".to_string(),

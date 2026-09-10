@@ -1,28 +1,33 @@
 // 操作队列状态管理 (Pinia Store)
-// 管理批量 Pull/Fetch 操作的队列和进度
+// 管理批量 Pull/Fetch/Push 的队列、进度、取消与失败重试
 
 import { defineStore } from 'pinia';
-import { ref } from 'vue';
+import { computed, ref } from 'vue';
 import { listen } from '@tauri-apps/api/event';
-import type { OperationTask, OperationEvent, ProjectGitResult } from '../types';
-import { batchPull as batchPullApi, batchFetch as batchFetchApi, batchPush as batchPushApi } from '../lib/tauriApi';
+import type { OperationTask, OperationEvent } from '../types';
+import {
+  batchPull as batchPullApi,
+  batchFetch as batchFetchApi,
+  batchPush as batchPushApi,
+} from '../lib/tauriApi';
 import { useAppStore } from './appStore';
 
+type BatchOp = 'pull' | 'push' | 'fetch';
+
 export const useOperationStore = defineStore('operation', () => {
-  // ========== State ==========
   const tasks = ref<OperationTask[]>([]);
   const isQueueRunning = ref(false);
   const showPanel = ref(false);
+  const lastOperation = ref<BatchOp | null>(null);
 
-  // ========== Helper Functions ==========
+  const failedTasks = computed(() => tasks.value.filter((t) => t.status === 'error'));
+  const successCount = computed(() => tasks.value.filter((t) => t.status === 'success').length);
+  const errorCount = computed(() => tasks.value.filter((t) => t.status === 'error').length);
 
-  /**
-   * 创建操作任务
-   */
   function createTask(
     projectId: string,
     projectName: string,
-    operation: 'pull' | 'push' | 'fetch'
+    operation: BatchOp
   ): OperationTask {
     const task: OperationTask = {
       id: crypto.randomUUID(),
@@ -36,56 +41,52 @@ export const useOperationStore = defineStore('operation', () => {
     return task;
   }
 
-  /**
-   * 更新任务状态
-   */
   function updateTask(taskId: string, updates: Partial<OperationTask>) {
-    const task = tasks.value.find(t => t.id === taskId);
+    const task = tasks.value.find((t) => t.id === taskId);
     if (task) {
       Object.assign(task, updates);
     }
   }
 
-  /**
-   * 按 projectId 更新任务（进度事件与后端结果均带 project_id）
-   */
   function updateTaskByProject(projectId: string, updates: Partial<OperationTask>) {
-    const task = tasks.value.find(t => t.projectId === projectId);
-    if (task) {
-      Object.assign(task, updates);
+    // 优先更新该项目最近一条未完成/失败任务
+    const list = tasks.value.filter((t) => t.projectId === projectId);
+    const target =
+      list.find((t) => t.status === 'pending' || t.status === 'running') ??
+      list[list.length - 1];
+    if (target) {
+      Object.assign(target, updates);
     }
   }
 
-  /**
-   * 统一批量操作流程：建任务 → 监听进度 → 并行结果回写
-   */
-  async function runBatch(
-    projectIds: string[],
-    operation: 'pull' | 'push' | 'fetch',
-    api: (ids: string[]) => Promise<ProjectGitResult[]>
-  ) {
+  const apiFor = {
+    pull: batchPullApi,
+    fetch: batchFetchApi,
+    push: batchPushApi,
+  } as const;
+
+  async function runBatch(projectIds: string[], operation: BatchOp) {
     if (projectIds.length === 0) return;
 
     const appStore = useAppStore();
-    const projectMap = new Map(appStore.projects.map(p => [p.id, p]));
+    const projectMap = new Map(appStore.projects.map((p) => [p.id, p]));
 
-    // 创建任务列表（按 project_id 匹配）
-    projectIds.forEach(id => {
+    projectIds.forEach((id) => {
       const project = projectMap.get(id);
       if (project) {
         createTask(id, project.name, operation);
       }
     });
 
+    lastOperation.value = operation;
     showPanel.value = true;
     isQueueRunning.value = true;
 
     let unlisten: (() => void) | null = null;
     try {
-      // 监听进度事件：用 project_id 对齐任务行
       unlisten = await listen<OperationEvent>('git:progress', (event) => {
         const { project_id, status, message } = event.payload;
-        if (tasks.value.some(t => t.projectId === project_id)) {
+        if (tasks.value.some((t) => t.projectId === project_id)) {
           updateTaskByProject(project_id, {
             status: status as OperationTask['status'],
             message: message || undefined,
@@ -93,75 +94,88 @@ export const useOperationStore = defineStore('operation', () => {
         }
       });
 
-      const results = await api(projectIds);
+      const results = await apiFor[operation](projectIds);
 
-      // 以 project_id 回写真实结果（后端返回顺序与传入顺序无关）
-      results.forEach(r => {
+      results.forEach((r) => {
         updateTaskByProject(r.project_id, {
           status: r.success ? 'success' : 'error',
           message: r.success ? undefined : r.stderr,
         });
       });
 
-      // 未返回的 id 标记失败，避免一直 pending
-      projectIds.forEach(id => {
-        const t = tasks.value.find(x => x.projectId === id);
+      projectIds.forEach((id) => {
+        const t = tasks.value.find((x) => x.projectId === id);
         if (t && t.status === 'pending') {
           updateTask(t.id, { status: 'error', message: '未收到执行结果' });
         }
       });
-
-      isQueueRunning.value = false;
     } catch (error) {
       console.error('批量操作失败：', error);
-      projectIds.forEach(id => {
+      projectIds.forEach((id) => {
         updateTaskByProject(id, { status: 'error', message: String(error) });
       });
-      isQueueRunning.value = false;
     } finally {
       if (unlisten) {
         unlisten();
       }
+      isQueueRunning.value = false;
     }
   }
 
-  // ========== Actions ==========
-
-  /**
-   * 批量 Pull 操作
-   */
   async function batchPull(projectIds: string[]) {
-    await runBatch(projectIds, 'pull', batchPullApi);
+    await runBatch(projectIds, 'pull');
   }
 
-  /**
-   * 批量 Fetch 操作
-   */
   async function batchFetch(projectIds: string[]) {
-    await runBatch(projectIds, 'fetch', batchFetchApi);
+    await runBatch(projectIds, 'fetch');
   }
 
-  /**
-   * 批量 Push 操作
-   */
   async function batchPush(projectIds: string[]) {
-    await runBatch(projectIds, 'push', batchPushApi);
+    await runBatch(projectIds, 'push');
   }
 
-  /**
-   * 清除已完成的任务
-   */
+  /** 取消：未开始的任务标为已取消；已执行的仍等待后端结束 */
+  function cancelQueue() {
+    if (!isQueueRunning.value) return;
+    tasks.value.forEach((t) => {
+      if (t.status === 'pending') {
+        updateTask(t.id, { status: 'error', message: '已取消' });
+      }
+    });
+  }
+
+  /** 重试最近一批中的失败任务 */
+  async function retryFailed() {
+    if (isQueueRunning.value || !lastOperation.value) return;
+    const ids = failedTasks.value
+      .filter((t) => t.operation === lastOperation.value)
+      .map((t) => t.projectId);
+    if (!ids.length) return;
+
+    // 移除旧行再重跑，避免同一项目多条历史
+    tasks.value = tasks.value.filter(
+      (t) => !(t.status === 'error' && ids.includes(t.projectId)),
+    );
+    await runBatch(ids, lastOperation.value);
+  }
+
   function clearCompleted() {
-    tasks.value = tasks.value.filter(t => t.status === 'pending' || t.status === 'running');
+    tasks.value = tasks.value.filter((t) => t.status === 'pending' || t.status === 'running');
   }
 
   return {
     tasks,
     isQueueRunning,
     showPanel,
+    lastOperation,
+    failedTasks,
+    successCount,
+    errorCount,
     batchPull,
     batchFetch,
     batchPush,
+    cancelQueue,
+    retryFailed,
     clearCompleted,
   };
 });

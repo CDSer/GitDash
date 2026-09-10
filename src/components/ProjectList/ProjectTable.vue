@@ -4,14 +4,32 @@
 -->
 <template>
   <div class="flex h-full flex-col">
-    <!-- 搜索框 -->
+    <!-- 搜索框 + 冲突汇总条 -->
     <div class="border-b border-border p-3">
-      <div class="relative max-w-[320px]">
-        <Search
-          :size="14"
-          class="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground"
-        />
-        <Input v-model="searchQuery" placeholder="搜索项目..." :style="{ paddingLeft: '2rem' }" />
+      <div class="flex flex-wrap items-center gap-3">
+        <div class="relative max-w-[320px] flex-1">
+          <Search
+            :size="14"
+            class="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground"
+          />
+          <Input v-model="searchQuery" placeholder="搜索项目..." :style="{ paddingLeft: '2rem' }" />
+        </div>
+        <button
+          v-if="conflictProjects.length"
+          type="button"
+          class="conflict-banner"
+          @click="openFirstConflict"
+        >
+          {{ conflictProjects.length }} 个仓库存在冲突 · 点击处理
+        </button>
+        <button
+          v-if="inProgressProjects.length"
+          type="button"
+          class="progress-banner"
+          @click="openSourceControl(inProgressProjects[0])"
+        >
+          {{ inProgressProjects.length }} 个仓库有进行中的合并/变基
+        </button>
       </div>
     </div>
 
@@ -67,7 +85,10 @@
             <StatusBadge :status="statusFor(row.id)" />
           </div>
           <div class="flex justify-center">
-            <StatusChanges :status="statusFor(row.id)" />
+            <StatusChanges
+              :status="statusFor(row.id)"
+              @open-conflicts="openSourceControl(row)"
+            />
           </div>
           <div class="flex items-center justify-end gap-1 pr-1">
             <Button variant="ghost" size="icon" title="打开工作区" @click.stop="enterWorkspace(row)">
@@ -230,6 +251,18 @@ const allSelected = computed(
 );
 const someSelected = computed(() => selectedProjectIds.value.size > 0);
 
+const conflictProjects = computed(() =>
+  appStore.projects.filter((p) => (appStore.statuses.get(p.id)?.conflict_count ?? 0) > 0),
+);
+const inProgressProjects = computed(() =>
+  appStore.projects.filter((p) => !!appStore.statuses.get(p.id)?.in_progress),
+);
+
+function openFirstConflict() {
+  const p = conflictProjects.value[0];
+  if (p) openSourceControl(p);
+}
+
 function toggleSelectAll() {
   if (allSelected.value) {
     appStore.clearSelection();
@@ -365,5 +398,29 @@ onMounted(() => {
   margin-right: 6px;
   border-radius: 50%;
   vertical-align: middle;
+}
+.conflict-banner,
+.progress-banner {
+  border: none;
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 600;
+  padding: 4px 10px;
+  border-radius: 6px;
+  white-space: nowrap;
+}
+.conflict-banner {
+  background: color-mix(in oklab, #dc2626 16%, transparent);
+  color: #dc2626;
+}
+.conflict-banner:hover {
+  background: color-mix(in oklab, #dc2626 26%, transparent);
+}
+.progress-banner {
+  background: color-mix(in oklab, #d97706 16%, transparent);
+  color: #b45309;
+}
+.progress-banner:hover {
+  background: color-mix(in oklab, #d97706 26%, transparent);
 }
 </style>

@@ -1006,9 +1006,39 @@ pub async fn open_repo_folder(
     Ok(())
 }
 
+/// 校验路径是否位于任一受管项目根目录内（拒绝 `..` 逃逸与任意系统路径）
+fn path_within_projects(state: &AppState, path: &str) -> Result<std::path::PathBuf, String> {
+    let raw = std::path::PathBuf::from(path);
+    // 禁止显式 .. 片段（规范化前先拦一层）
+    if path.split(['/', '\\']).any(|seg| seg == "..") {
+        return Err("路径不允许包含 ..".to_string());
+    }
+
+    let projects: Vec<String> = {
+        let config = state.config.read();
+        config.projects.iter().map(|p| p.path.clone()).collect()
+    };
+
+    let canon = raw
+        .canonicalize()
+        .map_err(|e| format!("路径无效：{}", e))?;
+
+    for root in &projects {
+        if let Ok(root_canon) = std::path::Path::new(root).canonicalize() {
+            if canon.starts_with(&root_canon) {
+                return Ok(canon);
+            }
+        }
+    }
+
+    Err("路径不在任何已管理项目内".to_string())
+}
+
 /// 列出目录内容（单层，供前端懒加载文件树使用）
+/// 仅允许访问已添加项目的根目录内路径
 #[tauri::command]
-pub async fn list_directory(path: String) -> Result<Vec<FileNode>, String> {
+pub async fn list_directory(path: String, state: State<'_, AppState>) -> Result<Vec<FileNode>, String> {
+    let path = path_within_projects(&state, &path)?;
     let entries = std::fs::read_dir(&path)
         .map_err(|e| format!("读取目录失败：{}", e))?;
 
@@ -1053,10 +1083,12 @@ pub async fn list_directory(path: String) -> Result<Vec<FileNode>, String> {
 }
 
 /// 读取文件内容（仅文本，超过 5MB 或二进制/NUL 字节会拒绝）
+/// 仅允许读取已管理项目内的文件
 #[tauri::command]
-pub async fn read_file(path: String) -> Result<String, String> {
+pub async fn read_file(path: String, state: State<'_, AppState>) -> Result<String, String> {
     const MAX_SIZE: u64 = 5 * 1024 * 1024;
 
+    let path = path_within_projects(&state, &path)?;
     let metadata = std::fs::metadata(&path).map_err(|e| format!("读取文件失败：{}", e))?;
     if metadata.len() > MAX_SIZE {
         return Err("文件过大（超过 5MB），无法在编辑器中打开".to_string());
@@ -1073,8 +1105,17 @@ pub async fn read_file(path: String) -> Result<String, String> {
 }
 
 /// 写入文件内容
+/// 仅允许写入已管理项目内的文件
 #[tauri::command]
-pub async fn write_file(path: String, content: String) -> Result<(), String> {
+pub async fn write_file(path: String, content: String, state: State<'_, AppState>) -> Result<(), String> {
+    let path = path_within_projects(&state, &path)?;
+    if path.is_dir() {
+        return Err("目标是目录，无法写入".to_string());
+    }
+    // 拒绝写入 .git 内部
+    if path.components().any(|c| c.as_os_str() == ".git") {
+        return Err("不允许写入 .git 目录内的文件".to_string());
+    }
     std::fs::write(&path, content).map_err(|e| format!("保存文件失败：{}", e))
 }
 
