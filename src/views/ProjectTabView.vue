@@ -305,5 +305,6 @@ async function onPush() {
   overflow: hidden;
   display: flex;
   flex-direction: column;
+  padding-bottom: 30px;
 }
 </style>
