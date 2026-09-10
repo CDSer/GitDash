@@ -8,6 +8,22 @@
   <div class="flex h-full flex-col">
     <div class="border-b border-border p-3">
       <div class="mb-3 text-sm font-semibold">GitDash</div>
+      <Button
+        variant="ghost"
+        class="mb-1.5 w-full justify-start"
+        :class="isHomeRoute ? 'nav-active' : ''"
+        @click="goHome"
+      >
+        <Home :size="14" /> 主页
+      </Button>
+      <Button
+        variant="ghost"
+        class="mb-1.5 w-full justify-start"
+        :class="isProjectsRoute ? 'nav-active' : ''"
+        @click="goProjects"
+      >
+        <List :size="14" /> 项目
+      </Button>
       <Button variant="outline" class="w-full" @click="openAddGroup">
         <Plus :size="14" /> 添加分组
       </Button>
@@ -133,10 +149,10 @@
 
 <script setup lang="ts">
 import { computed, ref, onMounted, watch, onBeforeUnmount } from 'vue';
-import { Plus, Pencil, Trash2, FolderX, ChevronRight, ChevronDown } from 'lucide-vue-next';
+import { Plus, Pencil, Trash2, FolderX, ChevronRight, ChevronDown, Home, List } from 'lucide-vue-next';
 import { useAppStore } from '../../stores/appStore';
 import { useDragProject } from '../../composables/useDragProject';
-import { useRouter } from 'vue-router';
+import { useRoute, useRouter } from 'vue-router';
 import type { Group, Project } from '../../types';
 import { defineAsyncComponent } from 'vue';
 import Button from '../ui/Button.vue';
@@ -154,6 +170,7 @@ import { toast } from '../../lib/toast';
 
 const appStore = useAppStore();
 const drag = useDragProject();
+const route = useRoute();
 const router = useRouter();
 
 const groupModalVisible = ref(false);
@@ -202,6 +219,22 @@ watch(
 
 function selectGroup(groupId: string) {
   appStore.activeGroupId = groupId;
+  // 从主页点分组时切到项目列表，保证过滤结果可见
+  if (route.name !== 'projects') {
+    router.push({ name: 'projects' });
+  }
+}
+
+const isHomeRoute = computed(() => route.name === 'home');
+const isProjectsRoute = computed(() => route.name === 'projects');
+
+function goHome() {
+  router.push({ name: 'home' });
+}
+
+function goProjects() {
+  appStore.activeGroupId = 'all';
+  router.push({ name: 'projects' });
 }
 
 let suppressRowClickUntil = 0;
@@ -601,5 +634,9 @@ async function doUnmanage() {
   font-size: 12px;
   color: var(--muted-foreground);
   opacity: 0.6;
+}
+.nav-active {
+  background-color: color-mix(in oklab, var(--primary) 16%, transparent);
+  color: var(--primary);
 }
 </style>
