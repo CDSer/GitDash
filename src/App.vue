@@ -12,6 +12,7 @@ import { onMounted, onUnmounted } from 'vue';
 import { RouterView } from 'vue-router';
 import ToastHost from './components/ui/ToastHost.vue';
 import { setupTheme } from './composables/useTheme';
+import { setupSkin } from './composables/useSkin';
 import { invoke } from '@tauri-apps/api/core';
 
 function onKeydown(e: KeyboardEvent) {
@@ -24,6 +25,7 @@ function onKeydown(e: KeyboardEvent) {
 
 onMounted(() => {
   setupTheme();
+  setupSkin();
   window.addEventListener('keydown', onKeydown);
 });
 

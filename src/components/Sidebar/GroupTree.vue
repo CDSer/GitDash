@@ -7,7 +7,10 @@
 <template>
   <div class="flex h-full flex-col">
     <div class="border-b border-border p-3">
-      <div class="mb-3 text-sm font-semibold">GitDash</div>
+      <div class="mb-3 flex items-center gap-2">
+        <SkinMascot :size="28" />
+        <span class="text-sm font-semibold">GitDash</span>
+      </div>
       <Button
         variant="ghost"
         class="mb-1.5 w-full justify-start"
@@ -165,6 +168,7 @@ import Button from '../ui/Button.vue';
 import ContextMenu from '../ui/ContextMenu.vue';
 import ContextMenuItem from '../ui/ContextMenuItem.vue';
 import Divider from '../ui/Divider.vue';
+import SkinMascot from '../../skins/components/SkinMascot.vue';
 
 defineEmits<{ (e: 'add-project'): void }>();
 

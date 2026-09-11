@@ -66,6 +66,31 @@
       </div>
 
       <div class="form-item">
+        <label class="form-label">皮肤</label>
+        <div class="skin-grid">
+          <button
+            v-for="skin in skins"
+            :key="skin.id"
+            type="button"
+            class="skin-card"
+            :class="{ 'skin-card--active': settings.skin === skin.id }"
+            :title="skin.description"
+            @click="onSelectSkin(skin.id)"
+          >
+            <div class="skin-swatches">
+              <span class="skin-swatch" :style="{ backgroundColor: skin.preview.primary }" />
+              <span class="skin-swatch" :style="{ backgroundColor: skin.preview.accent }" />
+            </div>
+            <div class="skin-name">{{ skin.name }}</div>
+            <div v-if="skin.mascot" class="skin-mascot">
+              <component :is="skin.mascot.idle" :size="28" />
+            </div>
+          </button>
+        </div>
+        <p class="form-tip">即时生效，点击保存后持久化</p>
+      </div>
+
+      <div class="form-item">
         <label class="form-label">全局快捷键</label>
         <Input v-model="settings.global_shortcut" placeholder="CmdOrControl+Shift+G" class="max-w-xs" />
         <p class="form-tip">示例：CmdOrControl+Shift+G</p>
@@ -95,6 +120,8 @@ import { computed } from 'vue';
 import { useAppStore } from '../../stores/appStore';
 import { open } from '@tauri-apps/plugin-dialog';
 import { toast } from '../../lib/toast';
+import { applySkin } from '../../composables/useSkin';
+import { builtinSkins, skinRegistry } from '../../skins';
 import Dialog from '../ui/Dialog.vue';
 import Input from '../ui/Input.vue';
 import Button from '../ui/Button.vue';
@@ -116,6 +143,13 @@ const themeLabels: Record<string, string> = {
   dark: '深色',
 };
 
+/** 内置皮肤 + 用户皮肤包（用户皮肤包由 loadUserSkins 异步注册进 registry） */
+const skins = computed(() => {
+  const builtinIds = new Set(builtinSkins.map((s) => s.id));
+  const userSkins = Object.values(skinRegistry).filter((s) => !builtinIds.has(s.id));
+  return [...builtinSkins, ...userSkins];
+});
+
 const gitPath = computed({
   get: () => appStore.settings.git_path || '',
   set: (value) => (appStore.settings.git_path = value || null),
@@ -130,6 +164,11 @@ const blacklistText = computed({
       .filter((s) => s.length > 0);
   },
 });
+
+function onSelectSkin(id: string) {
+  settings.value.skin = id;
+  applySkin(id);
+}
 
 function clampInt(v: string, min: number, max: number, fallback: number): number {
   const n = parseInt(v, 10);
@@ -196,5 +235,49 @@ async function saveSettings() {
   outline: none;
   border-color: var(--ring);
   box-shadow: 0 0 0 2px color-mix(in oklab, var(--ring) 30%, transparent);
+}
+.skin-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 8px;
+}
+.skin-card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  padding: 10px 6px 8px;
+  border-radius: 8px;
+  border: 1.5px solid var(--border);
+  background: var(--card);
+  cursor: pointer;
+  transition: border-color 0.15s, box-shadow 0.15s;
+}
+.skin-card:hover {
+  border-color: var(--muted-foreground);
+}
+.skin-card--active {
+  border-color: var(--primary);
+  box-shadow: 0 0 0 2px color-mix(in oklab, var(--primary) 30%, transparent);
+}
+.skin-swatches {
+  display: flex;
+  gap: 4px;
+}
+.skin-swatch {
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  border: 1px solid rgba(0, 0, 0, 0.1);
+}
+.skin-name {
+  font-size: 12px;
+  color: var(--foreground);
+}
+.skin-mascot {
+  height: 28px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
 </style>

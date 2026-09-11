@@ -39,6 +39,8 @@ pub struct Settings {
     pub auto_fetch_interval: u64,
     pub max_concurrent_git: usize,
     pub theme: String,
+    #[serde(default = "default_skin")]
+    pub skin: String,
     pub global_shortcut: String,
     #[serde(default = "default_scan_blacklist")]
     pub scan_blacklist: Vec<String>,
@@ -60,6 +62,10 @@ pub fn default_scan_blacklist() -> Vec<String> {
         ".idea".to_string(),
         ".vscode".to_string(),
     ]
+}
+
+pub fn default_skin() -> String {
+    "default".to_string()
 }
 
 /// 单个文件的改动（状态详情用）
@@ -294,4 +300,38 @@ pub struct ImportProgressEvent {
     pub scanned: u64,
     pub found: u64,
     pub current: String,
+}
+
+/// 用户皮肤包（从 app_data/skins/<id>/skin.json 读取）
+#[derive(Serialize, Clone, Debug)]
+pub struct UserSkinPack {
+    pub id: String,
+    pub name: String,
+    pub description: Option<String>,
+    pub author: Option<String>,
+    pub version: Option<String>,
+    pub preview: UserSkinPreview,
+    pub tokens: UserSkinTokens,
+    /// 可选：mascot.svg 原始内容（前端渲染为组件）
+    pub mascot_svg: Option<String>,
+    /// 可选：decoration.svg 原始内容
+    pub decoration_svg: Option<String>,
+}
+
+/// 用户皮肤预览色
+#[derive(Serialize, Clone, Debug)]
+pub struct UserSkinPreview {
+    pub primary: String,
+    pub accent: String,
+    #[serde(rename = "cardLight")]
+    pub card_light: String,
+    #[serde(rename = "cardDark")]
+    pub card_dark: String,
+}
+
+/// 用户皮肤色板（light / dark 各自的 token 覆盖）
+#[derive(Serialize, Clone, Debug)]
+pub struct UserSkinTokens {
+    pub light: std::collections::HashMap<String, String>,
+    pub dark: std::collections::HashMap<String, String>,
 }

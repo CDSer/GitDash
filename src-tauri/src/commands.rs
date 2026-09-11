@@ -5,7 +5,7 @@ use crate::models::{
     AppConfig, BatchImportResult, Branch, Commit, CommitDetail, CommitFile, ConflictFileContent,
     ConflictSide, DiscardEntry, FileNode, GitCommitResult, GitDiffContentResult, Group,
     InProgressOp, MergeResult, OperationEvent, Project, ProjectGitResult, ProjectStatus,
-    ScanOptions, ScannedRepo, Settings,
+    ScanOptions, ScannedRepo, Settings, UserSkinPack, UserSkinPreview, UserSkinTokens,
 };
 use crate::git::GitExecutor;
 use crate::scanner::ProjectScanner;
@@ -2050,4 +2050,137 @@ pub fn toggle_devtools(app: tauri::AppHandle) {
             }
         }
     }
+}
+
+// ============ 用户皮肤包 ============
+
+/// 扫描 app_data/skins/ 目录下的用户皮肤包
+/// 每个子目录含一个 skin.json（必需）和可选的 mascot.svg / decoration.svg
+#[tauri::command]
+pub async fn list_user_skins() -> Result<Vec<UserSkinPack>, String> {
+    let skins_dir = StatusCache::app_data_dir().join("skins");
+    if !skins_dir.exists() {
+        return Ok(Vec::new());
+    }
+
+    let entries = std::fs::read_dir(&skins_dir)
+        .map_err(|e| format!("读取皮肤目录失败：{}", e))?;
+
+    let mut packs = Vec::new();
+
+    for entry in entries {
+        let entry = match entry {
+            Ok(e) => e,
+            Err(_) => continue,
+        };
+        if !entry.file_type().map(|t| t.is_dir()).unwrap_or(false) {
+            continue;
+        }
+
+        let dir_path = entry.path();
+        let skin_json = dir_path.join("skin.json");
+        if !skin_json.exists() {
+            continue;
+        }
+
+        let content = match std::fs::read_to_string(&skin_json) {
+            Ok(c) => c,
+            Err(_) => continue,
+        };
+
+        let parsed: serde_json::Value = match serde_json::from_str(&content) {
+            Ok(v) => v,
+            Err(_) => continue,
+        };
+
+        // 必需字段：id, name, preview, tokens
+        let id = parsed
+            .get("id")
+            .and_then(|v| v.as_str())
+            .map(|s| s.to_string())
+            .unwrap_or_else(|| {
+                entry.file_name().to_string_lossy().to_string()
+            });
+        let name = parsed
+            .get("name")
+            .and_then(|v| v.as_str())
+            .unwrap_or(&id)
+            .to_string();
+        let description = parsed
+            .get("description")
+            .and_then(|v| v.as_str())
+            .map(|s| s.to_string());
+        let author = parsed
+            .get("author")
+            .and_then(|v| v.as_str())
+            .map(|s| s.to_string());
+        let version = parsed
+            .get("version")
+            .and_then(|v| v.as_str())
+            .map(|s| s.to_string());
+
+        let preview_obj = parsed.get("preview").cloned().unwrap_or_default();
+        let preview = UserSkinPreview {
+            primary: preview_obj
+                .get("primary")
+                .and_then(|v| v.as_str())
+                .unwrap_or("#3b82f6")
+                .to_string(),
+            accent: preview_obj
+                .get("accent")
+                .and_then(|v| v.as_str())
+                .unwrap_or("#6366f1")
+                .to_string(),
+            card_light: preview_obj
+                .get("cardLight")
+                .and_then(|v| v.as_str())
+                .unwrap_or("#ffffff")
+                .to_string(),
+            card_dark: preview_obj
+                .get("cardDark")
+                .and_then(|v| v.as_str())
+                .unwrap_or("#1e2028")
+                .to_string(),
+        };
+
+        let tokens_obj = parsed.get("tokens").cloned().unwrap_or_default();
+        let light = parse_token_map(tokens_obj.get("light"));
+        let dark = parse_token_map(tokens_obj.get("dark"));
+        let tokens = UserSkinTokens { light, dark };
+
+        // 可选 SVG 资源
+        let mascot_svg = std::fs::read_to_string(dir_path.join("mascot.svg")).ok();
+        let decoration_svg = std::fs::read_to_string(dir_path.join("decoration.svg")).ok();
+
+        packs.push(UserSkinPack {
+            id,
+            name,
+            description,
+            author,
+            version,
+            preview,
+            tokens,
+            mascot_svg,
+            decoration_svg,
+        });
+    }
+
+    // 按 name 排序
+    packs.sort_by(|a, b| a.name.cmp(&b.name));
+    Ok(packs)
+}
+
+/// 将 skin.json 里的 tokens.light/dark 对象解析为 HashMap<String, String>
+fn parse_token_map(
+    value: Option<&serde_json::Value>,
+) -> std::collections::HashMap<String, String> {
+    let mut map = std::collections::HashMap::new();
+    if let Some(serde_json::Value::Object(obj)) = value {
+        for (k, v) in obj {
+            if let Some(s) = v.as_str() {
+                map.insert(k.clone(), s.to_string());
+            }
+        }
+    }
+    map
 }

@@ -453,3 +453,33 @@ export async function terminalResize(
 export async function terminalClose(projectId: string): Promise<void> {
   return invoke('terminal_close', { projectId });
 }
+
+/**
+ * 用户皮肤包（从 app_data/skins/ 扫描）
+ */
+export interface UserSkinPack {
+  id: string;
+  name: string;
+  description: string | null;
+  author: string | null;
+  version: string | null;
+  preview: {
+    primary: string;
+    accent: string;
+    cardLight: string;
+    cardDark: string;
+  };
+  tokens: {
+    light: Record<string, string>;
+    dark: Record<string, string>;
+  };
+  mascot_svg: string | null;
+  decoration_svg: string | null;
+}
+
+/**
+ * 扫描用户皮肤包目录
+ */
+export async function listUserSkins(): Promise<UserSkinPack[]> {
+  return invoke<UserSkinPack[]>('list_user_skins');
+}

@@ -70,6 +70,11 @@ impl StatusCache {
         app_data_dir.join("config.json")
     }
 
+    /// 获取应用数据目录（公开，供 skins 等模块使用）
+    pub fn app_data_dir() -> PathBuf {
+        Self::get_app_data_dir()
+    }
+
     /// 获取应用数据目录
     fn get_app_data_dir() -> PathBuf {
         #[cfg(target_os = "windows")]
@@ -176,6 +181,7 @@ impl AppState {
                 auto_fetch_interval: 600,
                 max_concurrent_git: 3,
                 theme: "system".to_string(),
+                skin: "default".to_string(),
                 global_shortcut: "CommandOrControl+Shift+G".to_string(),
                 scan_blacklist: default_scan_blacklist(),
             },

@@ -28,6 +28,7 @@ export const useAppStore = defineStore('app', () => {
     auto_fetch_interval: 600,
     max_concurrent_git: 3,
     theme: 'system',
+    skin: 'default',
     global_shortcut: 'CommandOrControl+Shift+G',
     scan_blacklist: [
       '.git',

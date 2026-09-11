@@ -60,6 +60,7 @@
             <Spinner />
           </div>
           <div v-else-if="!attentionItems.length" class="panel-empty panel-empty--ok">
+            <SkinDecoration :size="64" kind="allClear" />
             <CheckCircle2 :size="18" />
             <span>全部已处理，可打开 Workspace 继续工作</span>
           </div>
@@ -163,6 +164,7 @@
             <h2 class="panel-title">常用项目</h2>
           </div>
           <div v-if="!favoriteProjects.length" class="panel-empty">
+            <SkinDecoration :size="72" kind="empty" />
             <span>暂无项目</span>
             <Button size="sm" variant="outline" class="mt-1" @click="showAddModal = true">
               <Plus :size="13" /> 添加项目
@@ -208,6 +210,7 @@ import { getCommits } from '../lib/tauriApi';
 import { toast } from '../lib/toast';
 import Button from '../components/ui/Button.vue';
 import Spinner from '../components/ui/Spinner.vue';
+import SkinDecoration from '../skins/components/SkinDecoration.vue';
 
 const AddProjectModal = defineAsyncComponent(
   () => import('../components/Modals/AddProjectModal.vue'),

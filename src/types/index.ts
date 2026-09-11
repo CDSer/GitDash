@@ -22,6 +22,8 @@ export interface Settings {
   auto_fetch_interval: number;
   max_concurrent_git: number;
   theme: 'system' | 'light' | 'dark';
+  /** 皮肤 id：'default' | 'spark' | 'sponge' | 'crew' | 自定义 */
+  skin: string;
   global_shortcut: string;
   scan_blacklist: string[];
 }
