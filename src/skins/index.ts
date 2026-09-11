@@ -4,6 +4,7 @@ import { defaultSkin } from './default';
 import { sparkSkin } from './spark';
 import { spongeSkin } from './sponge';
 import { crewSkin } from './crew';
+import { catSkin } from './cat';
 
 /** 内置皮肤列表（有序，设置面板按此顺序展示） */
 export const builtinSkins: SkinDef[] = [
@@ -11,6 +12,7 @@ export const builtinSkins: SkinDef[] = [
   sparkSkin,
   spongeSkin,
   crewSkin,
+  catSkin,
 ];
 
 /** 运行时注册表：id -> SkinDef */
