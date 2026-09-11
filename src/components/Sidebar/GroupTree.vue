@@ -124,7 +124,8 @@
             v-if="!projectsInGroup(group.id).length"
             class="project-empty"
           >
-            暂无项目
+            <SkinDecoration :size="40" kind="empty" class="project-empty-deco" />
+            <span>暂无项目</span>
           </div>
         </div>
       </div>
@@ -164,6 +165,7 @@ import ContextMenu from '../ui/ContextMenu.vue';
 import ContextMenuItem from '../ui/ContextMenuItem.vue';
 import Divider from '../ui/Divider.vue';
 import SkinMascot from '../../skins/components/SkinMascot.vue';
+import SkinDecoration from '../../skins/components/SkinDecoration.vue';
 
 const AddGroupModal = defineAsyncComponent(
   () => import('../Modals/AddGroupModal.vue'),
@@ -639,10 +641,18 @@ async function doUnmanage() {
   white-space: nowrap;
 }
 .project-empty {
-  padding: 6px 10px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  padding: 10px 10px 12px;
   font-size: 12px;
   color: var(--muted-foreground);
   opacity: 0.6;
+}
+.project-empty-deco {
+  display: block;
+  opacity: 0.85;
 }
 .nav-active {
   background-color: color-mix(in oklab, var(--primary) 16%, transparent);

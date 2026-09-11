@@ -85,6 +85,7 @@
         </div>
 
         <div v-if="filteredCandidates.length === 0" class="empty-state">
+          <SkinDecoration :size="64" kind="empty" class="empty-deco" />
           <p>未发现新的 Git 仓库</p>
           <p class="empty-tip">可检查扫描深度或设置中的黑名单配置</p>
         </div>
@@ -149,6 +150,7 @@ import Button from '../ui/Button.vue';
 import Alert from '../ui/Alert.vue';
 import Spinner from '../ui/Spinner.vue';
 import GroupPicker from '../ui/GroupPicker.vue';
+import SkinDecoration from '../../skins/components/SkinDecoration.vue';
 
 const visible = defineModel<boolean>({ required: true });
 
@@ -483,14 +485,19 @@ function closeModal() {
   flex-direction: column;
   align-items: center;
   justify-content: center;
+  gap: 6px;
   padding: 32px 0;
   text-align: center;
   color: var(--muted-foreground);
   font-size: 14px;
 }
+.empty-deco {
+  display: block;
+  margin-bottom: 2px;
+}
 .empty-tip {
   font-size: 12px;
-  margin-top: 4px;
+  margin-top: 0;
 }
 
 .candidate-list {

@@ -180,7 +180,7 @@
           </div>
         </div>
 
-        <Empty v-if="!filteredProjects.length" description="暂无项目" />
+        <Empty v-if="!filteredProjects.length" description="暂无项目" skin :decoration-size="72" />
       </div>
     </div>
 
