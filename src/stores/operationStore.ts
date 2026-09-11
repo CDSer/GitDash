@@ -1,5 +1,6 @@
 // 操作队列状态管理 (Pinia Store)
 // 管理批量 Pull/Fetch/Push 的队列、进度、取消与失败重试
+// 同时驱动顶部进度日志 toast（实时过程信息）
 
 import { defineStore } from 'pinia';
 import { computed, ref } from 'vue';
@@ -10,9 +11,37 @@ import {
   batchFetch as batchFetchApi,
   batchPush as batchPushApi,
 } from '../lib/tauriApi';
+import { beginProgressToast } from '../lib/toast';
 import { useAppStore } from './appStore';
 
 type BatchOp = 'pull' | 'push' | 'fetch';
+
+const OP_LABEL: Record<BatchOp, string> = {
+  pull: '拉取',
+  push: '推送',
+  fetch: '获取',
+};
+
+const OP_GIT: Record<BatchOp, string> = {
+  pull: 'git pull --no-edit',
+  push: 'git push',
+  fetch: 'git fetch --prune --all',
+};
+
+function extractLogLines(result: { stdout: string; stderr: string; success: boolean }): string[] {
+  const lines: string[] = [];
+  const pushBlock = (label: string, text: string) => {
+    const trimmed = text.trim();
+    if (!trimmed) return;
+    lines.push(`—— ${label} ——`);
+    for (const line of trimmed.split('\n')) {
+      if (line.trim()) lines.push(line.replace(/\s+$/, ''));
+    }
+  };
+  pushBlock('stdout', result.stdout);
+  pushBlock('stderr', result.stderr);
+  return lines;
+}
 
 export const useOperationStore = defineStore('operation', () => {
   const tasks = ref<OperationTask[]>([]);
@@ -59,6 +88,11 @@ export const useOperationStore = defineStore('operation', () => {
     }
   }
 
+  function projectNameOf(projectId: string, fallback = projectId): string {
+    const appStore = useAppStore();
+    return appStore.projects.find((p) => p.id === projectId)?.name ?? fallback;
+  }
+
   const apiFor = {
     pull: batchPullApi,
     fetch: batchFetchApi,
@@ -70,6 +104,7 @@ export const useOperationStore = defineStore('operation', () => {
 
     const appStore = useAppStore();
     const projectMap = new Map(appStore.projects.map((p) => [p.id, p]));
+    const label = OP_LABEL[operation];
 
     projectIds.forEach((id) => {
       const project = projectMap.get(id);
@@ -82,43 +117,84 @@ export const useOperationStore = defineStore('operation', () => {
     showPanel.value = true;
     isQueueRunning.value = true;
 
+    const progress = beginProgressToast(
+      `${label} ${projectIds.length} 个项目`,
+      `开始${label} · 执行 ${OP_GIT[operation]} · 并发受 Git 限制`,
+    );
+    projectIds.forEach((id) => {
+      const name = projectMap.get(id)?.name ?? id;
+      progress.log(`排队：${name}`);
+    });
+
     let unlisten: (() => void) | null = null;
     try {
       unlisten = await listen<OperationEvent>('git:progress', (event) => {
         const { project_id, status, message } = event.payload;
-        if (tasks.value.some((t) => t.projectId === project_id)) {
-          updateTaskByProject(project_id, {
-            status: status as OperationTask['status'],
-            message: message || undefined,
-          });
+        if (!tasks.value.some((t) => t.projectId === project_id)) return;
+
+        const name = projectNameOf(project_id);
+        if (message) {
+          progress.log(message);
+        } else if (status === 'running') {
+          progress.log(`${name}：执行中…`);
         }
+
+        updateTaskByProject(project_id, {
+          status: status as OperationTask['status'],
+          message: message || undefined,
+        });
       });
 
+      progress.log(`调用后端 batch_${operation}…`);
       const results = await apiFor[operation](projectIds);
+      progress.log(`后端返回 ${results.length} 条结果`);
 
       results.forEach((r) => {
+        const name = projectNameOf(r.project_id);
+        const detailLines = extractLogLines(r);
+        detailLines.forEach((line) => progress.log(`[${name}] ${line}`));
+
         updateTaskByProject(r.project_id, {
           status: r.success ? 'success' : 'error',
-          message: r.success ? undefined : r.stderr,
+          message: r.success ? undefined : r.stderr || undefined,
         });
       });
 
       projectIds.forEach((id) => {
         const t = tasks.value.find((x) => x.projectId === id);
         if (t && t.status === 'pending') {
+          progress.log(`[${projectNameOf(id)}] 未收到执行结果`);
           updateTask(t.id, { status: 'error', message: '未收到执行结果' });
         }
       });
+
+      const okCount = results.filter((r) => r.success).length;
+      const failCount = results.filter((r) => !r.success).length;
+      const allOk = results.length > 0 && failCount === 0;
+      const summary = failCount === 0 && results.length > 0
+        ? `${label}完成：成功 ${okCount}/${results.length}`
+        : `${label}结束：成功 ${okCount}，失败 ${failCount}`;
+      progress.log(summary);
+      progress.done(allOk, summary);
     } catch (error) {
       console.error('批量操作失败：', error);
+      const msg = String(error);
+      progress.log(`异常：${msg}`);
       projectIds.forEach((id) => {
-        updateTaskByProject(id, { status: 'error', message: String(error) });
+        updateTaskByProject(id, { status: 'error', message: msg });
       });
+      progress.done(false, `${label}失败：${msg}`);
     } finally {
       if (unlisten) {
         unlisten();
       }
       isQueueRunning.value = false;
+      // 全部执行完后自动收起操作队列面板（留短暂时间看一眼结果）
+      setTimeout(() => {
+        if (!isQueueRunning.value) {
+          showPanel.value = false;
+        }
+      }, 1200);
     }
   }
 

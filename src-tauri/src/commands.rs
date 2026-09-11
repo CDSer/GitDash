@@ -850,35 +850,41 @@ pub async fn batch_pull(
         let window = window.clone();
         set.spawn(async move {
             let task_id = Uuid::new_v4().to_string();
-            let _ = window.emit(
-                "git:progress",
-                OperationEvent {
-                    task_id: task_id.clone(),
-                    project_id: project.id.clone(),
-                    status: "running".to_string(),
-                    message: Some(format!("正在拉取 {}...", project.name)),
-                },
-            );
+            let emit = |status: &str, message: String| {
+                let _ = window.emit(
+                    "git:progress",
+                    OperationEvent {
+                        task_id: task_id.clone(),
+                        project_id: project.id.clone(),
+                        status: status.to_string(),
+                        message: Some(message),
+                    },
+                );
+            };
 
+            emit("running", format!("[{}] 准备拉取…", project.name));
+            emit("running", format!("[{}] 执行 git pull --no-edit", project.name));
             let result = git.exec(&project.path, &["pull", "--no-edit"]).await;
             cache.invalidate(&project.id);
+            emit(
+                "running",
+                format!(
+                    "[{}] 命令结束（{}ms），刷新状态缓存…",
+                    project.name, result.duration_ms
+                ),
+            );
 
             let status = if result.success {
                 "success"
             } else {
                 "error"
             };
-            let _ = window.emit(
-                "git:progress",
-                OperationEvent {
-                    task_id,
-                    project_id: project.id.clone(),
-                    status: status.to_string(),
-                    message: Some(if result.success {
-                        format!("成功拉取 {}", project.name)
-                    } else {
-                        format!("拉取 {} 失败：{}", project.name, result.stderr)
-                    }),
+            emit(
+                status,
+                if result.success {
+                    format!("[{}] 拉取成功", project.name)
+                } else {
+                    format!("[{}] 拉取失败：{}", project.name, result.stderr)
                 },
             );
 
@@ -913,35 +919,44 @@ pub async fn batch_fetch(
         let window = window.clone();
         set.spawn(async move {
             let task_id = Uuid::new_v4().to_string();
-            let _ = window.emit(
-                "git:progress",
-                OperationEvent {
-                    task_id: task_id.clone(),
-                    project_id: project.id.clone(),
-                    status: "running".to_string(),
-                    message: Some(format!("正在获取 {}...", project.name)),
-                },
-            );
+            let emit = |status: &str, message: String| {
+                let _ = window.emit(
+                    "git:progress",
+                    OperationEvent {
+                        task_id: task_id.clone(),
+                        project_id: project.id.clone(),
+                        status: status.to_string(),
+                        message: Some(message),
+                    },
+                );
+            };
 
+            emit("running", format!("[{}] 准备获取远程更新…", project.name));
+            emit(
+                "running",
+                format!("[{}] 执行 git fetch --prune --all", project.name),
+            );
             let result = git.exec(&project.path, &["fetch", "--prune", "--all"]).await;
             cache.invalidate(&project.id);
+            emit(
+                "running",
+                format!(
+                    "[{}] 命令结束（{}ms），刷新状态缓存…",
+                    project.name, result.duration_ms
+                ),
+            );
 
             let status = if result.success {
                 "success"
             } else {
                 "error"
             };
-            let _ = window.emit(
-                "git:progress",
-                OperationEvent {
-                    task_id,
-                    project_id: project.id.clone(),
-                    status: status.to_string(),
-                    message: Some(if result.success {
-                        format!("成功获取 {}", project.name)
-                    } else {
-                        format!("获取 {} 失败：{}", project.name, result.stderr)
-                    }),
+            emit(
+                status,
+                if result.success {
+                    format!("[{}] 获取成功", project.name)
+                } else {
+                    format!("[{}] 获取失败：{}", project.name, result.stderr)
                 },
             );
 
@@ -976,15 +991,19 @@ pub async fn batch_push(
         let window = window.clone();
         set.spawn(async move {
             let task_id = Uuid::new_v4().to_string();
-            let _ = window.emit(
-                "git:progress",
-                OperationEvent {
-                    task_id: task_id.clone(),
-                    project_id: project.id.clone(),
-                    status: "running".to_string(),
-                    message: Some(format!("正在推送 {}...", project.name)),
-                },
-            );
+            let emit = |status: &str, message: String| {
+                let _ = window.emit(
+                    "git:progress",
+                    OperationEvent {
+                        task_id: task_id.clone(),
+                        project_id: project.id.clone(),
+                        status: status.to_string(),
+                        message: Some(message),
+                    },
+                );
+            };
+
+            emit("running", format!("[{}] 检查上游分支…", project.name));
 
             // 无上游分支时直接报错，避免 git 交互式提示卡死
             let upstream = git
@@ -995,15 +1014,7 @@ pub async fn batch_push(
                 .await;
             if !upstream.success || upstream.stdout.trim().is_empty() {
                 let msg = "当前分支尚未设置上游分支，无法推送".to_string();
-                let _ = window.emit(
-                    "git:progress",
-                    OperationEvent {
-                        task_id,
-                        project_id: project.id.clone(),
-                        status: "error".to_string(),
-                        message: Some(format!("推送 {} 失败：{}", project.name, msg)),
-                    },
-                );
+                emit("error", format!("[{}] 推送失败：{}", project.name, msg));
                 return ProjectGitResult {
                     project_id: project.id,
                     success: false,
@@ -1013,25 +1024,31 @@ pub async fn batch_push(
                 };
             }
 
+            emit(
+                "running",
+                format!("[{}] 上游就绪，执行 git push", project.name),
+            );
             let result = git.exec(&project.path, &["push"]).await;
             cache.invalidate(&project.id);
+            emit(
+                "running",
+                format!(
+                    "[{}] 命令结束（{}ms），刷新状态缓存…",
+                    project.name, result.duration_ms
+                ),
+            );
 
             let status = if result.success {
                 "success"
             } else {
                 "error"
             };
-            let _ = window.emit(
-                "git:progress",
-                OperationEvent {
-                    task_id,
-                    project_id: project.id.clone(),
-                    status: status.to_string(),
-                    message: Some(if result.success {
-                        format!("成功推送 {}", project.name)
-                    } else {
-                        format!("推送 {} 失败：{}", project.name, result.stderr)
-                    }),
+            emit(
+                status,
+                if result.success {
+                    format!("[{}] 推送成功", project.name)
+                } else {
+                    format!("[{}] 推送失败：{}", project.name, result.stderr)
                 },
             );
 

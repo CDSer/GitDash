@@ -44,10 +44,19 @@
           size="sm"
           variant="outline"
           :disabled="opBusy"
-          title="获取远端更新"
+          title="获取远端更新（不合并）"
           @click="onFetch"
         >
-          <Download :size="14" /> 获取
+          <CloudDownload :size="14" /> 获取
+        </Button>
+        <Button
+          size="sm"
+          variant="primary"
+          :disabled="opBusy || !!status?.in_progress"
+          title="拉取并合并当前分支"
+          @click="onPull"
+        >
+          <Download :size="14" /> 拉取
         </Button>
         <Button
           size="sm"
@@ -102,7 +111,7 @@
 
 <script setup lang="ts">
 import { computed, defineAsyncComponent, ref } from 'vue';
-import { GitBranch, RefreshCw, Download, Upload, FolderTree, GitCommitHorizontal, GitMerge, SquareTerminal } from 'lucide-vue-next';
+import { GitBranch, RefreshCw, CloudDownload, Download, Upload, FolderTree, GitCommitHorizontal, GitMerge, SquareTerminal } from 'lucide-vue-next';
 import type { ProjectTabMode } from '../stores/tabStore';
 import { useAppStore } from '../stores/appStore';
 import { useTabStore } from '../stores/tabStore';
@@ -190,6 +199,23 @@ async function onFetch() {
     }
   } catch {
     toast.error('获取失败');
+  }
+}
+
+async function onPull() {
+  if (opBusy.value || status.value?.in_progress) return;
+  try {
+    await operationStore.batchPull([props.projectId]);
+    await getStatus(props.projectId, true);
+    historyRefreshKey.value += 1;
+    const errMsg = latestTaskMessage(props.projectId);
+    if (errMsg) {
+      toast.error(`拉取失败：${errMsg}`);
+    } else {
+      toast.success('拉取完成');
+    }
+  } catch {
+    toast.error('拉取失败');
   }
 }
 
