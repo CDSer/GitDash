@@ -10,7 +10,7 @@
       :project-count="projects.length"
       @add-project="showAddModal = true"
       @batch-import="showBatchImportModal = true"
-      @settings="showSettings = true"
+      @settings="tabStore.openSettingsTab()"
     />
 
     <div class="flex min-h-0 flex-1">
@@ -66,6 +66,8 @@
           />
           <!-- 项目列表系统标签 -->
           <ProjectListView v-else-if="tabStore.viewKind === 'projects'" />
+          <!-- 设置系统标签 -->
+          <SettingsView v-else-if="tabStore.viewKind === 'settings'" />
           <!-- 主页（RouterView） -->
           <RouterView v-else />
         </main>
@@ -76,7 +78,6 @@
 
     <AddProjectModal v-model="showAddModal" />
     <BatchImportModal v-model="showBatchImportModal" />
-    <SettingsModal v-model="showSettings" />
     <ProjectPickerModal v-model="showProjectPicker" />
   </div>
 </template>
@@ -99,15 +100,15 @@ const ProjectTabView = defineAsyncComponent(
 const ProjectListView = defineAsyncComponent(
   () => import('./ProjectListView.vue'),
 );
+const SettingsView = defineAsyncComponent(
+  () => import('./SettingsView.vue'),
+);
 
 const AddProjectModal = defineAsyncComponent(
   () => import('../components/Modals/AddProjectModal.vue'),
 );
 const BatchImportModal = defineAsyncComponent(
   () => import('../components/Modals/BatchImportModal.vue'),
-);
-const SettingsModal = defineAsyncComponent(
-  () => import('../components/Modals/SettingsModal.vue'),
 );
 const ProjectPickerModal = defineAsyncComponent(
   () => import('../components/Modals/ProjectPickerModal.vue'),
@@ -119,7 +120,6 @@ const { getStatus, startPolling, stopPolling, watchRepoChanges } = useProjectSta
 
 const showAddModal = ref(false);
 const showBatchImportModal = ref(false);
-const showSettings = ref(false);
 const showProjectPicker = ref(false);
 
 const projects = computed(() => appStore.projects);

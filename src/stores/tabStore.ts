@@ -10,9 +10,12 @@ export type ProjectTabMode = 'workspace' | 'changes' | 'history' | 'terminal';
 /** 项目列表系统标签的固定 id */
 export const PROJECTS_TAB_ID = '__projects__';
 
+/** 设置系统标签的固定 id */
+export const SETTINGS_TAB_ID = '__settings__';
+
 export interface ProjectTab {
   /**
-   * 项目 ID；PROJECTS_TAB_ID 表示「项目列表」系统标签
+   * 项目 ID；PROJECTS_TAB_ID 表示「项目列表」系统标签，SETTINGS_TAB_ID 表示「设置」系统标签
    */
   projectId: string;
   /** 仅项目标签有；系统标签无 mode */
@@ -25,6 +28,14 @@ function isProjectsTabId(id: string): boolean {
   return id === PROJECTS_TAB_ID;
 }
 
+function isSettingsTabId(id: string): boolean {
+  return id === SETTINGS_TAB_ID;
+}
+
+function isSystemTabId(id: string): boolean {
+  return isProjectsTabId(id) || isSettingsTabId(id);
+}
+
 function loadTabs(): ProjectTab[] {
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
@@ -34,7 +45,7 @@ function loadTabs(): ProjectTab[] {
     return arr
       .filter((t): t is ProjectTab => {
         if (!t || typeof t.projectId !== 'string') return false;
-        if (isProjectsTabId(t.projectId)) return true;
+        if (isSystemTabId(t.projectId)) return true;
         return (
           t.mode === 'workspace' ||
           t.mode === 'changes' ||
@@ -45,6 +56,9 @@ function loadTabs(): ProjectTab[] {
       .map((t) => {
         if (isProjectsTabId(t.projectId)) {
           return { projectId: PROJECTS_TAB_ID };
+        }
+        if (isSettingsTabId(t.projectId)) {
+          return { projectId: SETTINGS_TAB_ID };
         }
         return { projectId: t.projectId, mode: t.mode as ProjectTabMode };
       });
@@ -66,17 +80,20 @@ export const useTabStore = defineStore('tabs', () => {
     () => tabs.value.find((t) => t.projectId === activeProjectId.value) ?? null,
   );
 
-  /** 视图：主页 | 项目列表标签 | 项目标签 */
-  const viewKind = computed<'home' | 'projects' | 'project'>(() => {
+  /** 视图：主页 | 项目列表标签 | 设置标签 | 项目标签 */
+  const viewKind = computed<'home' | 'projects' | 'settings' | 'project'>(() => {
     if (!activeProjectId.value) return 'home';
     if (isProjectsTabId(activeProjectId.value)) return 'projects';
+    if (isSettingsTabId(activeProjectId.value) && tabs.value.some((t) => isSettingsTabId(t.projectId))) {
+      return 'settings';
+    }
     if (tabs.value.some((t) => t.projectId === activeProjectId.value)) return 'project';
     return 'home';
   });
 
   /** 已打开的项目 ID 列表（不含系统标签） */
   const openProjectIds = computed(() =>
-    tabs.value.map((t) => t.projectId).filter((id) => !isProjectsTabId(id)),
+    tabs.value.map((t) => t.projectId).filter((id) => !isSystemTabId(id)),
   );
 
   function persist() {
@@ -111,11 +128,22 @@ export const useTabStore = defineStore('tabs', () => {
     persist();
   }
 
+  /** 打开「设置」系统标签（紧跟项目列表系统标签之后） */
+  function openSettingsTab() {
+    if (!tabs.value.some((t) => isSettingsTabId(t.projectId))) {
+      const projectsIdx = tabs.value.findIndex((t) => isProjectsTabId(t.projectId));
+      const at = projectsIdx === -1 ? tabs.value.length : projectsIdx + 1;
+      tabs.value.splice(at, 0, { projectId: SETTINGS_TAB_ID });
+    }
+    activeProjectId.value = SETTINGS_TAB_ID;
+    persist();
+  }
+
   function closeTab(projectId: string) {
     const idx = tabs.value.findIndex((t) => t.projectId === projectId);
     if (idx === -1) return;
     tabs.value.splice(idx, 1);
-    if (!isProjectsTabId(projectId)) {
+    if (!isSystemTabId(projectId)) {
       void terminalClose(projectId).catch(() => {});
     }
     if (activeProjectId.value === projectId) {
@@ -127,7 +155,7 @@ export const useTabStore = defineStore('tabs', () => {
 
   function closeOtherTabs(projectId: string) {
     for (const t of tabs.value) {
-      if (t.projectId !== projectId && !isProjectsTabId(t.projectId)) {
+      if (t.projectId !== projectId && !isSystemTabId(t.projectId)) {
         void terminalClose(t.projectId).catch(() => {});
       }
     }
@@ -138,7 +166,7 @@ export const useTabStore = defineStore('tabs', () => {
 
   function closeAllTabs() {
     for (const t of tabs.value) {
-      if (!isProjectsTabId(t.projectId)) {
+      if (!isSystemTabId(t.projectId)) {
         void terminalClose(t.projectId).catch(() => {});
       }
     }
@@ -159,7 +187,7 @@ export const useTabStore = defineStore('tabs', () => {
   }
 
   function setMode(projectId: string, mode: ProjectTabMode) {
-    if (isProjectsTabId(projectId)) return;
+    if (isSystemTabId(projectId)) return;
     const t = tabs.value.find((x) => x.projectId === projectId);
     if (!t) return;
     t.mode = mode;
@@ -171,7 +199,7 @@ export const useTabStore = defineStore('tabs', () => {
 
   /** 项目被移除时清理标签（不影响系统标签） */
   function removeProjectTabs(projectIds: string[]) {
-    const idSet = new Set(projectIds.filter((id) => !isProjectsTabId(id)));
+    const idSet = new Set(projectIds.filter((id) => !isSystemTabId(id)));
     for (const id of idSet) {
       void terminalClose(id).catch(() => {});
     }
@@ -192,6 +220,7 @@ export const useTabStore = defineStore('tabs', () => {
     openProjectIds,
     openProject,
     openProjectsTab,
+    openSettingsTab,
     closeTab,
     closeOtherTabs,
     closeAllTabs,

@@ -29,6 +29,29 @@
         </button>
       </div>
 
+      <!-- 设置系统标签（紧跟项目列表之后，可关闭） -->
+      <div
+        v-if="hasSettingsTab"
+        class="tab-item tab-item--system"
+        :class="{ 'tab-item--active': isSettingsActive }"
+        title="设置"
+        role="tab"
+        :aria-selected="isSettingsActive"
+        @click="tabStore.setActive(SETTINGS_TAB_ID)"
+        @auxclick.middle.prevent="tabStore.closeTab(SETTINGS_TAB_ID)"
+      >
+        <Settings :size="12" class="tab-icon" />
+        <span class="tab-label tab-label--system">设置</span>
+        <button
+          type="button"
+          class="tab-close"
+          title="关闭标签"
+          @click.stop="tabStore.closeTab(SETTINGS_TAB_ID)"
+        >
+          <X :size="12" />
+        </button>
+      </div>
+
       <ContextMenu v-for="tab in projectTabs" :key="tab.projectId">
         <template #trigger>
           <div
@@ -87,9 +110,9 @@
 
 <script setup lang="ts">
 import { computed } from 'vue';
-import { Plus, X } from 'lucide-vue-next';
+import { Plus, Settings, X } from 'lucide-vue-next';
 import { useAppStore } from '../../stores/appStore';
-import { useTabStore, PROJECTS_TAB_ID } from '../../stores/tabStore';
+import { useTabStore, PROJECTS_TAB_ID, SETTINGS_TAB_ID } from '../../stores/tabStore';
 import ContextMenu from '../ui/ContextMenu.vue';
 import ContextMenuItem from '../ui/ContextMenuItem.vue';
 import ContextMenuDivider from '../ui/Divider.vue';
@@ -100,7 +123,7 @@ const appStore = useAppStore();
 const tabStore = useTabStore();
 
 const projectTabs = computed(() =>
-  tabStore.tabs.filter((t) => t.projectId !== PROJECTS_TAB_ID),
+  tabStore.tabs.filter((t) => !isSystemId(t.projectId)),
 );
 const hasProjectsTab = computed(() =>
   tabStore.tabs.some((t) => t.projectId === PROJECTS_TAB_ID),
@@ -108,7 +131,17 @@ const hasProjectsTab = computed(() =>
 const isProjectsActive = computed(
   () => tabStore.activeProjectId === PROJECTS_TAB_ID,
 );
+const hasSettingsTab = computed(() =>
+  tabStore.tabs.some((t) => t.projectId === SETTINGS_TAB_ID),
+);
+const isSettingsActive = computed(
+  () => tabStore.activeProjectId === SETTINGS_TAB_ID,
+);
 const activeProjectId = computed(() => tabStore.activeProjectId);
+
+function isSystemId(id: string): boolean {
+  return id === PROJECTS_TAB_ID || id === SETTINGS_TAB_ID;
+}
 
 function projectName(projectId: string): string {
   return appStore.projects.find((p) => p.id === projectId)?.name ?? '未知项目';
@@ -181,6 +214,10 @@ function closeAll() {
 }
 .tab-item--system {
   min-width: 96px;
+}
+.tab-icon {
+  flex-shrink: 0;
+  opacity: 0.7;
 }
 .tab-dot {
   width: 7px;
