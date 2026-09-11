@@ -518,7 +518,7 @@ async function doUnmanage() {
 
 <style scoped>
 .group-block {
-  border-radius: 6px;
+  border-radius: var(--radius-sm);
   margin-bottom: 2px;
   transition: background-color 0.15s ease;
 }
@@ -537,7 +537,7 @@ async function doUnmanage() {
 .group-header {
   display: flex;
   align-items: center;
-  border-radius: 6px;
+  border-radius: var(--radius-sm);
   cursor: pointer;
   color: var(--muted-foreground);
 }

@@ -16,7 +16,7 @@
     <div class="flex min-h-0 flex-1">
       <aside
         ref="sidebarRef"
-        class="relative flex shrink-0 flex-col overflow-hidden border-r border-border bg-card"
+        class="global-sidebar relative flex shrink-0 flex-col overflow-hidden border-r border-border bg-card"
         :class="{ collapsed: sidebarCollapsed, resizing: isResizing }"
       >
         <div v-if="!sidebarCollapsed" class="flex h-full flex-col">

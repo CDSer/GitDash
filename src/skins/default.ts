@@ -1,4 +1,5 @@
 // 默认皮肤（indigo，即现有 shadcn 默认）
+// tokens 留空 = 完全跟随 tailwind.css 基座
 import type { SkinDef } from '../types/skin';
 
 export const defaultSkin: SkinDef = {

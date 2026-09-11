@@ -1,31 +1,44 @@
 // 皮肤运行时：将当前皮肤 id 应用到 <html data-skin="...">，
-// 并 watch settings.skin 变化自动切换
+// 并把 tokens 注入为 CSS 变量；watch settings.skin / theme 自动切换
 import { watch } from 'vue';
 import { useAppStore } from '../stores/appStore';
 import { getSkin, skinRegistry } from '../skins';
 import { loadUserSkins } from '../skins/loadUserSkins';
+import { applySkinTokens } from '../skins/tokens';
+
+function isDarkMode(): boolean {
+  return document.documentElement.classList.contains('dark');
+}
 
 export function applySkin(id: string): void {
   const skin = getSkin(id);
   document.documentElement.dataset.skin = skin.id;
+  const tokens = isDarkMode() ? skin.tokens.dark : skin.tokens.light;
+  applySkinTokens(tokens);
 }
 
 export function setupSkin(): void {
   const appStore = useAppStore();
 
-  // 初始应用（config 可能还没加载，用当前 settings 值兜底）
   applySkin(appStore.settings.skin || 'default');
 
   watch(
-    () => appStore.settings.skin,
-    (skinId) => {
-      applySkin(skinId || 'default');
+    () => [appStore.settings.skin, appStore.settings.theme] as const,
+    () => {
+      applySkin(appStore.settings.skin || 'default');
     },
   );
 
-  // 异步加载用户皮肤包（不阻塞启动）
+  // system 主题：系统深浅切换时 theme 类由 useTheme 更新，这里补一次 tokens
+  const mq = window.matchMedia('(prefers-color-scheme: dark)');
+  const onSystemChange = () => {
+    if (appStore.settings.theme === 'system') {
+      applySkin(appStore.settings.skin || 'default');
+    }
+  };
+  mq.addEventListener('change', onSystemChange);
+
   loadUserSkins().then(() => {
-    // 加载后重新应用当前皮肤（可能用户皮肤包里有同 id？已过滤内置 id，这里只是确保生效）
     applySkin(appStore.settings.skin || 'default');
   });
 }

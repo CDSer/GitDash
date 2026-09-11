@@ -1,24 +1,11 @@
 // 用户皮肤包加载器
 // 从后端扫描 app_data/skins/ 目录，将 skin.json 转为 SkinDef 并注册
 import { defineComponent, h } from 'vue';
-import type { SkinDef, SkinColorTokens } from '../types/skin';
+import type { SkinDef } from '../types/skin';
 import { listUserSkins, type UserSkinPack } from '../lib/tauriApi';
 import { registerSkin, builtinSkins } from './index';
+import { toSkinTokens } from './tokens';
 import SvgMascot from './components/SvgMascot.vue';
-
-/** 将后端 token map 转为 SkinColorTokens（保留已知 key） */
-function toTokens(map: Record<string, string>): SkinColorTokens {
-  const out: SkinColorTokens = {};
-  const keys: Array<keyof SkinColorTokens> = [
-    'primary', 'primaryForeground', 'secondary', 'secondaryForeground',
-    'accent', 'accentForeground', 'muted', 'mutedForeground',
-    'destructive', 'destructiveForeground', 'border', 'ring', 'radius',
-  ];
-  for (const k of keys) {
-    if (map[k]) out[k] = map[k];
-  }
-  return out;
-}
 
 /** 将原始 SVG 字符串包成一个可渲染的 Vue 组件 */
 function svgToComponent(svg: string | null | undefined) {
@@ -60,8 +47,8 @@ function packToSkinDef(pack: UserSkinPack): SkinDef {
       cardDark: pack.preview.cardDark,
     },
     tokens: {
-      light: toTokens(pack.tokens.light),
-      dark: toTokens(pack.tokens.dark),
+      light: toSkinTokens(pack.tokens.light),
+      dark: toSkinTokens(pack.tokens.dark),
     },
   };
 

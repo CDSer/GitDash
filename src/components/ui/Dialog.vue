@@ -90,11 +90,11 @@ const contentStyle = computed(() => {
   flex-direction: column;
   width: calc(100% - 32px);
   max-height: 86vh;
-  border-radius: 12px;
+  border-radius: calc(var(--radius) * 1.5);
   background-color: var(--popover);
   color: var(--popover-foreground);
   border: 1px solid var(--border);
-  box-shadow: 0 16px 48px rgba(0, 0, 0, 0.3);
+  box-shadow: var(--shadow-lg);
   overflow: hidden;
 }
 .ui-dialog-content--md {
@@ -131,7 +131,7 @@ const contentStyle = computed(() => {
   width: 28px;
   height: 28px;
   border: none;
-  border-radius: 6px;
+  border-radius: var(--radius-sm);
   background: transparent;
   color: var(--muted-foreground);
   cursor: pointer;

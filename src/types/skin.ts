@@ -5,6 +5,12 @@ import type { Component } from 'vue';
 
 /** 可被皮肤覆盖的 CSS 变量（oklch 字符串或任意 CSS 颜色） */
 export interface SkinColorTokens {
+  background?: string;
+  foreground?: string;
+  card?: string;
+  cardForeground?: string;
+  popover?: string;
+  popoverForeground?: string;
   primary?: string;
   primaryForeground?: string;
   secondary?: string;
@@ -16,8 +22,11 @@ export interface SkinColorTokens {
   destructive?: string;
   destructiveForeground?: string;
   border?: string;
+  input?: string;
   ring?: string;
   radius?: string;
+  /** 阴影气质：soft / hard / none，或直接写 CSS box-shadow */
+  shadow?: string;
 }
 
 export type SkinMood = 'idle' | 'happy' | 'worried' | 'celebrating';

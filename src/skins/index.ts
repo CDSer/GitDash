@@ -1,4 +1,5 @@
 // 皮肤注册表：内置皮肤在这里注册，用户皮肤包后续可动态合并
+import { reactive } from 'vue';
 import type { SkinDef, SkinRegistry } from '../types/skin';
 import { defaultSkin } from './default';
 import { sparkSkin } from './spark';
@@ -9,15 +10,15 @@ import { catSkin } from './cat';
 /** 内置皮肤列表（有序，设置面板按此顺序展示） */
 export const builtinSkins: SkinDef[] = [
   defaultSkin,
+  catSkin,
   sparkSkin,
   spongeSkin,
   crewSkin,
-  catSkin,
 ];
 
-/** 运行时注册表：id -> SkinDef */
-export const skinRegistry: SkinRegistry = Object.fromEntries(
-  builtinSkins.map((s) => [s.id, s]),
+/** 运行时注册表：id -> SkinDef（响应式，用户皮肤加载后设置面板可即时刷新） */
+export const skinRegistry: SkinRegistry = reactive(
+  Object.fromEntries(builtinSkins.map((s) => [s.id, s])),
 );
 
 /** 按 id 获取皮肤，未知 id 回落到 default */

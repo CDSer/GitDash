@@ -1,0 +1,133 @@
+/* 皮肤 Chrome：高曝光面的风格化覆盖（侧栏 / 顶栏 / 标签栏）
+   token 由运行时注入；这里只改几何气质与 chrome 细节，不碰业务布局 */
+
+/* ========== 猫咪：暖橘软 chrome + 肉垫点缀 ========== */
+[data-skin='cat'] aside.global-sidebar,
+[data-skin='cat'] .global-toolbar,
+[data-skin='cat'] .tab-bar {
+  border-color: color-mix(in oklab, var(--primary) 20%, var(--border));
+}
+
+[data-skin='cat'] .global-toolbar {
+  background: linear-gradient(
+    180deg,
+    color-mix(in oklab, var(--accent) 18%, var(--card)),
+    var(--card)
+  );
+}
+
+[data-skin='cat'] .tab-item--active {
+  box-shadow: inset 0 -3px 0 0 var(--primary);
+  border-radius: 8px 8px 0 0;
+  background: color-mix(in oklab, var(--primary) 8%, var(--background));
+}
+
+[data-skin='cat'] .toolbar-btn:hover,
+[data-skin='cat'] .toolbar-icon-btn:hover {
+  background: color-mix(in oklab, var(--accent) 35%, transparent);
+  color: var(--foreground);
+}
+
+[data-skin='cat'] aside .group-header:hover,
+[data-skin='cat'] aside .project-item:hover {
+  background: color-mix(in oklab, var(--accent) 28%, transparent);
+}
+
+[data-skin='cat'] aside .group-block--active > .group-header,
+[data-skin='cat'] aside .nav-active {
+  background-color: color-mix(in oklab, var(--primary) 14%, transparent);
+  color: var(--primary);
+  box-shadow: inset 0 -1px 0 0 color-mix(in oklab, var(--primary) 40%, transparent);
+}
+
+/* ========== 电气鼠：软圆角 + 暖侧栏 ========== */
+[data-skin='spark'] aside.global-sidebar,
+[data-skin='spark'] .global-toolbar,
+[data-skin='spark'] .tab-bar {
+  border-color: color-mix(in oklab, var(--primary) 18%, var(--border));
+}
+
+[data-skin='spark'] .tab-item--active {
+  box-shadow: inset 0 -3px 0 0 var(--primary);
+  border-radius: 6px 6px 0 0;
+}
+
+[data-skin='spark'] .toolbar-btn:hover,
+[data-skin='spark'] .toolbar-icon-btn:hover {
+  background: color-mix(in oklab, var(--primary) 16%, transparent);
+  color: var(--foreground);
+}
+
+[data-skin='spark'] aside .group-header:hover,
+[data-skin='spark'] aside .project-item:hover {
+  background: color-mix(in oklab, var(--primary) 10%, transparent);
+}
+
+/* ========== 海绵方块：大圆角 + 厚边框 ========== */
+[data-skin='sponge'] .global-toolbar {
+  border-bottom-width: 2px;
+}
+
+[data-skin='sponge'] aside {
+  border-right-width: 2px;
+}
+
+[data-skin='sponge'] .tab-item {
+  border-right-width: 2px;
+}
+
+[data-skin='sponge'] .tab-item--active {
+  box-shadow: inset 0 -4px 0 0 var(--primary);
+  background: color-mix(in oklab, var(--primary) 8%, var(--background));
+}
+
+[data-skin='sponge'] .toolbar-btn,
+[data-skin='sponge'] .toolbar-icon-btn {
+  border-radius: calc(var(--radius) * 0.9);
+}
+
+[data-skin='sponge'] aside .group-header {
+  border-radius: 10px;
+}
+
+/* ========== 太空船员：方角 + HUD 描边 ========== */
+[data-skin='crew'] .global-toolbar {
+  background: linear-gradient(
+    180deg,
+    color-mix(in oklab, var(--primary) 8%, var(--card)),
+    var(--card)
+  );
+  border-bottom-color: color-mix(in oklab, var(--primary) 35%, var(--border));
+}
+
+[data-skin='crew'] aside {
+  background: color-mix(in oklab, var(--primary) 4%, var(--card));
+  border-right-color: color-mix(in oklab, var(--primary) 28%, var(--border));
+}
+
+[data-skin='crew'] .tab-bar {
+  border-bottom-color: color-mix(in oklab, var(--primary) 30%, var(--border));
+}
+
+[data-skin='crew'] .tab-item--active {
+  box-shadow:
+    inset 0 -2px 0 0 var(--primary),
+    inset 0 0 0 1px color-mix(in oklab, var(--primary) 25%, transparent);
+  background: color-mix(in oklab, var(--primary) 6%, var(--background));
+}
+
+[data-skin='crew'] .toolbar-btn:hover,
+[data-skin='crew'] .toolbar-icon-btn:hover {
+  background: color-mix(in oklab, var(--primary) 14%, transparent);
+  color: var(--primary);
+}
+
+[data-skin='crew'] aside .group-block--active > .group-header,
+[data-skin='crew'] aside .nav-active {
+  box-shadow: inset 2px 0 0 0 var(--primary);
+}
+
+[data-skin='crew'] .ui-dialog-content {
+  border-radius: calc(var(--radius) * 1.1);
+  border-color: color-mix(in oklab, var(--primary) 30%, var(--border));
+}

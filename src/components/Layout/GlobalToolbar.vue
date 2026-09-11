@@ -176,7 +176,7 @@ onBeforeUnmount(() => {
   height: 32px;
   padding: 0 10px;
   border: none;
-  border-radius: 6px;
+  border-radius: var(--radius-sm);
   background: transparent;
   color: var(--foreground);
   font-size: 13px;
@@ -195,7 +195,7 @@ onBeforeUnmount(() => {
   width: 32px;
   height: 32px;
   border: none;
-  border-radius: 6px;
+  border-radius: var(--radius-sm);
   background: transparent;
   color: var(--muted-foreground);
   cursor: pointer;
@@ -234,7 +234,7 @@ onBeforeUnmount(() => {
   width: 36px;
   height: 36px;
   border: none;
-  border-radius: 4px;
+  border-radius: var(--radius-sm);
   background: transparent;
   color: var(--foreground);
   cursor: pointer;
