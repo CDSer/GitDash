@@ -8,6 +8,7 @@ pub mod scanner;
 pub mod store;
 pub mod terminal;
 pub mod watcher;
+pub mod window_controls;
 
 // 重新导出常用类型（避免歧义）
 pub use models::*;
@@ -62,7 +63,8 @@ macro_rules! invoke_handler {
             $crate::terminal::terminal_write,
             $crate::terminal::terminal_resize,
             $crate::terminal::terminal_close,
-            $crate::commands::toggle_devtools
+            $crate::commands::toggle_devtools,
+            $crate::window_controls::set_macos_traffic_light_position
         ]
     };
 }
