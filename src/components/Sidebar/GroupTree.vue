@@ -27,14 +27,9 @@
       >
         <List :size="14" /> 项目
       </Button>
-      <div class="flex gap-1.5">
-        <Button variant="outline" class="min-w-0 flex-1" @click="$emit('add-project')">
-          <Plus :size="14" /> 添加项目
-        </Button>
-        <Button variant="outline" class="min-w-0 flex-1" @click="openAddGroup">
-          <Plus :size="14" /> 添加分组
-        </Button>
-      </div>
+      <Button variant="outline" class="w-full" @click="openAddGroup">
+        <Plus :size="14" /> 添加分组
+      </Button>
     </div>
 
     <div ref="scrollContainer" class="min-h-0 flex-1 overflow-y-auto p-1.5">
@@ -169,8 +164,6 @@ import ContextMenu from '../ui/ContextMenu.vue';
 import ContextMenuItem from '../ui/ContextMenuItem.vue';
 import Divider from '../ui/Divider.vue';
 import SkinMascot from '../../skins/components/SkinMascot.vue';
-
-defineEmits<{ (e: 'add-project'): void }>();
 
 const AddGroupModal = defineAsyncComponent(
   () => import('../Modals/AddGroupModal.vue'),

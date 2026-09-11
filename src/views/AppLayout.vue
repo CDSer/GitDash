@@ -1,10 +1,18 @@
 <!--
   应用布局组件
-  包含侧边栏分组树、顶部工具栏、中间 RouterView 主体区域
+  全局顶栏横跨侧栏+内容区；下方左侧侧边栏分组树，右侧 RouterView 主体区域
   宽度通过 CSS 变量控制，避免拖拽时触发 Vue 重渲染
 -->
 <template>
   <div class="flex h-screen flex-col overflow-hidden bg-background text-foreground">
+    <!-- 全局顶栏：公共操作横跨全宽 -->
+    <GlobalToolbar
+      :project-count="projects.length"
+      @add-project="showAddModal = true"
+      @batch-import="showBatchImportModal = true"
+      @settings="showSettings = true"
+    />
+
     <div class="flex min-h-0 flex-1">
       <aside
         ref="sidebarRef"
@@ -12,7 +20,7 @@
         :class="{ collapsed: sidebarCollapsed, resizing: isResizing }"
       >
         <div v-if="!sidebarCollapsed" class="flex h-full flex-col">
-          <GroupTree @add-project="showAddModal = true" />
+          <GroupTree />
         </div>
 
         <!-- 收起状态：窄条 + 展开按钮 -->
@@ -49,39 +57,6 @@
         <!-- 项目多标签栏（Fork 风格）：始终可见；无标签时也可从 + 打开 -->
         <ProjectTabBar @open-picker="showProjectPicker = true" />
 
-        <!-- 工具栏：仅在主页显示完整操作；标签视图自带顶栏 -->
-        <header
-          v-if="tabStore.viewKind === 'home'"
-          class="flex h-12 shrink-0 items-center justify-between border-b border-border bg-card px-4"
-        >
-          <div class="flex items-center gap-2">
-            <Button variant="ghost" size="icon" title="批量导入" @click="showBatchImportModal = true">
-              <FolderPlus :size="16" />
-            </Button>
-            <Button variant="ghost" size="icon" title="设置" @click="showSettings = true">
-              <Settings :size="16" />
-            </Button>
-          </div>
-          <span class="text-xs text-muted-foreground">{{ projects.length }} 个项目</span>
-        </header>
-        <header
-          v-else
-          class="flex h-10 shrink-0 items-center justify-between border-b border-border bg-card px-3"
-        >
-          <div class="flex items-center gap-2 text-xs text-muted-foreground">
-            <span>{{ projects.length }} 个项目</span>
-            <span v-if="tabStore.tabs.length">· {{ tabStore.tabs.length }} 个标签已打开</span>
-          </div>
-          <div class="flex items-center gap-1">
-            <Button variant="ghost" size="sm" title="设置" @click="showSettings = true">
-              <Settings :size="14" />
-            </Button>
-            <Button variant="ghost" size="sm" title="批量导入" @click="showBatchImportModal = true">
-              <FolderPlus :size="14" />
-            </Button>
-          </div>
-        </header>
-
         <main class="min-h-0 flex-1 overflow-hidden">
           <!-- 活动项目标签：嵌入工作区 / 变更 / 历史 -->
           <ProjectTabView
@@ -108,10 +83,11 @@
 
 <script setup lang="ts">
 import { ref, computed, onMounted, onUnmounted, defineAsyncComponent } from 'vue';
-import { Settings, FolderPlus, PanelLeftOpen, PanelLeftClose } from 'lucide-vue-next';
+import { PanelLeftOpen, PanelLeftClose } from 'lucide-vue-next';
 import { useAppStore } from '../stores/appStore';
 import { useProjectStatus } from '../composables/useProjectStatus';
 import { useTabStore } from '../stores/tabStore';
+import GlobalToolbar from '../components/Layout/GlobalToolbar.vue';
 import GroupTree from '../components/Sidebar/GroupTree.vue';
 import ProjectTabBar from '../components/Tabs/ProjectTabBar.vue';
 import OperationQueue from '../components/OperationPanel/OperationQueue.vue';
