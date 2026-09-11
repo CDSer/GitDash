@@ -48,6 +48,13 @@ fn main() {
             // 恢复上次窗口位置/尺寸/最大化状态
             if let Some(window) = app.get_webview_window("main") {
                 let _ = window.restore_state(StateFlags::all());
+
+                // Windows：关闭系统标题栏，只保留前端自绘控件，避免出现两套窗口按钮
+                // macOS 保留 decorations + titleBarStyle Overlay（红绿灯）
+                #[cfg(target_os = "windows")]
+                {
+                    let _ = window.set_decorations(false);
+                }
             }
 
             // 初始化状态：从磁盘加载配置（首次运行时写入默认配置）

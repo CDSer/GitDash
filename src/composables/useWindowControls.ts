@@ -74,6 +74,7 @@ export async function syncMacTrafficLightsToToolbar(
 
 export function useWindowControls() {
   const isFullscreen = ref(false);
+  const isMaximized = ref(false);
   const isMac = IS_MAC;
   const isDesktop = IS_TAURI;
   const showControls = shouldShowWindowControls(isMac, isDesktop);
@@ -83,15 +84,19 @@ export function useWindowControls() {
   async function updateWindowState() {
     if (!isDesktop) return;
     const { getCurrentWindow } = await import('@tauri-apps/api/window');
-    isFullscreen.value = await getCurrentWindow().isFullscreen();
+    const win = getCurrentWindow();
+    isFullscreen.value = await win.isFullscreen();
+    isMaximized.value = await win.isMaximized();
   }
 
   async function minimize() {
+    if (!isDesktop) return;
     const { getCurrentWindow } = await import('@tauri-apps/api/window');
     await getCurrentWindow().minimize();
   }
 
   async function toggleMaximize() {
+    if (!isDesktop) return;
     const { getCurrentWindow } = await import('@tauri-apps/api/window');
     await getCurrentWindow().toggleMaximize();
     setTimeout(updateWindowState, 50);
@@ -125,6 +130,7 @@ export function useWindowControls() {
     isDesktop,
     showControls,
     isFullscreen,
+    isMaximized,
     minimize,
     toggleMaximize,
     close,

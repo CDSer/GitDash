@@ -30,17 +30,36 @@
         <Settings :size="16" />
       </button>
 
-      <!-- 非 macOS：自绘窗口控制按钮 -->
+      <!-- 非 macOS：自绘窗口控制按钮（Windows 已关闭系统标题栏） -->
       <template v-if="showControls">
         <span class="toolbar-divider" />
         <div class="window-controls">
-          <button type="button" class="win-btn" title="最小化" @click="minimize">
+          <button
+            type="button"
+            class="win-btn"
+            title="最小化"
+            @pointerdown.stop
+            @click.stop="minimize"
+          >
             <Minus :size="12" :stroke-width="2" />
           </button>
-          <button type="button" class="win-btn" title="最大化" @click="toggleMaximize">
-            <Square :size="11" :stroke-width="2" />
+          <button
+            type="button"
+            class="win-btn"
+            :title="isMaximized ? '还原' : '最大化'"
+            @pointerdown.stop
+            @click.stop="toggleMaximize"
+          >
+            <Copy v-if="isMaximized" :size="11" :stroke-width="2" />
+            <Square v-else :size="11" :stroke-width="2" />
           </button>
-          <button type="button" class="win-btn win-btn--close" title="关闭" @click="close">
+          <button
+            type="button"
+            class="win-btn win-btn--close"
+            title="关闭"
+            @pointerdown.stop
+            @click.stop="close"
+          >
             <X :size="13" :stroke-width="2" />
           </button>
         </div>
@@ -51,7 +70,7 @@
 
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue';
-import { Plus, FolderPlus, Settings, Minus, Square, X } from 'lucide-vue-next';
+import { Plus, FolderPlus, Settings, Minus, Square, Copy, X } from 'lucide-vue-next';
 import {
   macTrafficLightInsetPaddingForScale,
   shouldReserveMacTrafficLightInset,
@@ -66,6 +85,7 @@ const {
   isDesktop,
   showControls,
   isFullscreen,
+  isMaximized,
   minimize,
   toggleMaximize,
   close,
