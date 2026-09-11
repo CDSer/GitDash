@@ -1,15 +1,14 @@
 <!--
   全局顶栏：横跨侧栏 + 内容区的最顶部，与 macOS 红绿灯同一排
-  - data-tauri-drag-region 实现窗口拖拽
+  - 中间 .toolbar-drag 作为窗口拖拽区（不整条 header 拖拽，避免抢走按钮点击）
   - macOS：测量按钮中心 → 后端移动红绿灯 → 用 reserved_inset 设 paddingLeft
-  - 非 macOS：右侧自绘窗口控制按钮
+  - 非 macOS：右侧自绘窗口控制按钮（mousedown 直接触发，Windows 无边框更可靠）
 -->
 <template>
   <header
     ref="toolbarEl"
     class="global-toolbar"
     :style="toolbarStyle"
-    data-tauri-drag-region
   >
     <div class="toolbar-left">
       <button type="button" class="toolbar-btn" title="添加项目" @click="$emit('add-project')">
@@ -21,6 +20,9 @@
         <span>批量导入</span>
       </button>
     </div>
+
+    <!-- 拖拽区：空白可拖窗口；左右控件不受影响 -->
+    <div class="toolbar-drag" data-tauri-drag-region />
 
     <div class="toolbar-right">
       <span v-if="projectCount !== undefined && projectCount > 0" class="toolbar-meta">
@@ -38,8 +40,8 @@
             type="button"
             class="win-btn"
             title="最小化"
-            @pointerdown.stop
-            @click.stop="minimize"
+            @pointerdown.stop.prevent="onWinMinimize"
+            @click.stop.prevent="onWinMinimize"
           >
             <Minus :size="12" :stroke-width="2" />
           </button>
@@ -47,8 +49,8 @@
             type="button"
             class="win-btn"
             :title="isMaximized ? '还原' : '最大化'"
-            @pointerdown.stop
-            @click.stop="toggleMaximize"
+            @pointerdown.stop.prevent="onWinMaximize"
+            @click.stop.prevent="onWinMaximize"
           >
             <Copy v-if="isMaximized" :size="11" :stroke-width="2" />
             <Square v-else :size="11" :stroke-width="2" />
@@ -57,8 +59,8 @@
             type="button"
             class="win-btn win-btn--close"
             title="关闭"
-            @pointerdown.stop
-            @click.stop="close"
+            @pointerdown.stop.prevent="onWinClose"
+            @click.stop.prevent="onWinClose"
           >
             <X :size="13" :stroke-width="2" />
           </button>
@@ -90,6 +92,18 @@ const {
   toggleMaximize,
   close,
 } = useWindowControls();
+
+// mousedown 与 click 可能连续触发两次，做短防抖
+let winActionLock = 0;
+function runWinAction(fn: () => void | Promise<void>) {
+  const now = performance.now();
+  if (now - winActionLock < 200) return;
+  winActionLock = now;
+  void fn();
+}
+const onWinMinimize = () => runWinAction(minimize);
+const onWinMaximize = () => runWinAction(toggleMaximize);
+const onWinClose = () => runWinAction(close);
 
 defineProps<{ projectCount?: number }>();
 defineEmits<{
@@ -187,6 +201,14 @@ onBeforeUnmount(() => {
   display: flex;
   align-items: center;
   gap: 4px;
+  flex-shrink: 0;
+}
+
+.toolbar-drag {
+  flex: 1;
+  align-self: stretch;
+  min-width: 24px;
+  cursor: default;
 }
 
 .toolbar-btn {
@@ -244,7 +266,7 @@ onBeforeUnmount(() => {
   display: flex;
   align-items: center;
   gap: 2px;
-  padding-right: 4px;
+  padding-right: 0;
 }
 
 .win-btn {
@@ -257,7 +279,7 @@ onBeforeUnmount(() => {
   border-radius: var(--radius-sm);
   background: transparent;
   color: var(--foreground);
-  cursor: pointer;
+  cursor: default;
   transition: background-color 0.12s;
 }
 .win-btn:hover {

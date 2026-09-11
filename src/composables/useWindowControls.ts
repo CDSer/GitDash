@@ -1,8 +1,10 @@
-// macOS 红绿灯对齐（移植自 dbx-main / DBX）
-// 前端测量工具按钮中心 → invoke 后端把系统红绿灯挪到同一中心 → 用 reserved_inset 设置 paddingLeft
+// 窗口控制 + macOS 红绿灯对齐
+// Windows/Linux：自绘 min/max/close（无系统标题栏）
+// macOS：系统红绿灯对齐到工具栏
 
 import { ref, onMounted, onUnmounted } from 'vue';
 import { invoke } from '@tauri-apps/api/core';
+import { getCurrentWindow } from '@tauri-apps/api/window';
 import { IS_MAC, IS_TAURI } from '../lib/platform';
 
 const MIN_UI_SCALE = 0.75;
@@ -42,7 +44,6 @@ export function shouldShowWindowControls(isMac: boolean, isDesktop = true): bool
 
 /**
  * 将系统红绿灯移动到与工具栏按钮文字同一垂直中心，并返回实测 reserved_inset。
- * uiScale：应用级界面缩放（GitDash 暂固定 1）。
  */
 export async function syncMacTrafficLightsToToolbar(
   toolbarEl: HTMLElement | null,
@@ -83,36 +84,47 @@ export function useWindowControls() {
 
   async function updateWindowState() {
     if (!isDesktop) return;
-    const { getCurrentWindow } = await import('@tauri-apps/api/window');
-    const win = getCurrentWindow();
-    isFullscreen.value = await win.isFullscreen();
-    isMaximized.value = await win.isMaximized();
+    try {
+      const win = getCurrentWindow();
+      isFullscreen.value = await win.isFullscreen();
+      isMaximized.value = await win.isMaximized();
+    } catch (error) {
+      console.warn('[GitDash] updateWindowState failed', error);
+    }
   }
 
   async function minimize() {
     if (!isDesktop) return;
-    const { getCurrentWindow } = await import('@tauri-apps/api/window');
-    await getCurrentWindow().minimize();
+    try {
+      await getCurrentWindow().minimize();
+    } catch (error) {
+      console.error('[GitDash] minimize failed', error);
+    }
   }
 
   async function toggleMaximize() {
     if (!isDesktop) return;
-    const { getCurrentWindow } = await import('@tauri-apps/api/window');
-    await getCurrentWindow().toggleMaximize();
-    setTimeout(updateWindowState, 50);
+    try {
+      await getCurrentWindow().toggleMaximize();
+      await updateWindowState();
+    } catch (error) {
+      console.error('[GitDash] toggleMaximize failed', error);
+    }
   }
 
   async function close() {
     if (!isDesktop) return;
-    const { getCurrentWindow } = await import('@tauri-apps/api/window');
-    await getCurrentWindow().close();
+    try {
+      await getCurrentWindow().close();
+    } catch (error) {
+      console.error('[GitDash] close failed', error);
+    }
   }
 
   onMounted(async () => {
     if (!isDesktop) return;
     await updateWindowState();
     try {
-      const { getCurrentWindow } = await import('@tauri-apps/api/window');
       unlisten = await getCurrentWindow().onResized(() => {
         void updateWindowState();
       });
