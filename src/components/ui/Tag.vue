@@ -27,8 +27,9 @@ withDefaults(
   padding: 0 7px;
   font-size: 11px;
   line-height: 1;
-  border-radius: 4px;
+  border-radius: 5px;
   font-weight: 500;
+  letter-spacing: -0.01em;
   white-space: nowrap;
 }
 .ui-tag--default {
@@ -36,23 +37,29 @@ withDefaults(
   color: var(--muted-foreground);
 }
 .ui-tag--primary {
-  background-color: color-mix(in oklab, var(--primary) 18%, transparent);
+  background-color: color-mix(in srgb, var(--primary) 14%, transparent);
   color: var(--primary);
 }
 .ui-tag--success {
-  background-color: color-mix(in oklab, oklch(0.7 0.18 150) 18%, transparent);
-  color: oklch(0.6 0.16 150);
+  background-color: color-mix(in srgb, var(--sys-green) 16%, transparent);
+  color: var(--sys-green);
 }
 .ui-tag--danger {
-  background-color: color-mix(in oklab, var(--destructive) 18%, transparent);
+  background-color: color-mix(in srgb, var(--destructive) 14%, transparent);
   color: var(--destructive);
 }
 .ui-tag--warning {
-  background-color: color-mix(in oklab, oklch(0.8 0.16 85) 20%, transparent);
-  color: oklch(0.7 0.15 75);
+  background-color: color-mix(in srgb, var(--sys-orange) 16%, transparent);
+  color: var(--sys-orange);
 }
 .ui-tag--info {
-  background-color: color-mix(in oklab, var(--primary) 14%, transparent);
+  background-color: color-mix(in srgb, var(--primary) 10%, transparent);
   color: var(--muted-foreground);
+}
+.dark .ui-tag--success {
+  color: var(--sys-green);
+}
+.dark .ui-tag--warning {
+  color: var(--sys-orange);
 }
 </style>

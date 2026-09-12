@@ -6,7 +6,7 @@
 -->
 <template>
   <div class="git-panel flex h-full min-h-0 flex-col">
-    <div class="flex h-10 shrink-0 items-center gap-3 border-b border-border bg-card px-3">
+    <div class="surface-toolbar flex h-11 shrink-0 items-center gap-3 hairline-b px-3">
       <Select
         :model-value="currentBranch"
         :options="branchOptions"
@@ -23,7 +23,7 @@
     </div>
 
     <div class="git-body relative flex min-h-0 flex-1 overflow-y-auto overflow-x-hidden" @scroll="onScroll">
-      <div class="git-rail-col shrink-0 border-r border-border">
+      <div class="git-rail-col shrink-0 hairline-r">
         <div class="git-head-rail" />
         <GitGraphRail :commits="commits" :selected-id="selectedId" @select="onSelect" />
       </div>
@@ -101,7 +101,7 @@
       </div>
     </div>
 
-    <div v-if="detail" class="git-detail shrink-0 max-h-[40%] overflow-auto border-t border-border bg-card p-3">
+    <div v-if="detail" class="git-detail shrink-0 max-h-[40%] overflow-auto hairline-t p-3">
       <div class="detail-title">
         提交详情 · {{ detail.short_id }}
         <span class="detail-author">{{ detail.author }}</span>

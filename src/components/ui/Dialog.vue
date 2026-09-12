@@ -8,14 +8,14 @@
         :class="[
           'ui-dialog-content',
           sizeClass,
-          'data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:animate-in data-[state=open]:fade-in-0',
+          'data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:animate-in data-[state=open]:fade-in-0 data-[state=open]:slide-in-from-bottom-2',
         ]"
         :style="contentStyle"
       >
         <DialogTitle v-if="title" class="ui-dialog-title">{{ title }}</DialogTitle>
         <DialogDescription class="sr-only" />
         <DialogClose class="ui-dialog-close" aria-label="关闭">
-          <X :size="16" />
+          <X :size="14" />
         </DialogClose>
         <div class="ui-dialog-body" :class="{ 'ui-dialog-body--flush': flush }">
           <slot />
@@ -77,8 +77,13 @@ const contentStyle = computed(() => {
   position: fixed;
   inset: 0;
   z-index: 1000;
-  background-color: rgba(0, 0, 0, 0.45);
+  background-color: rgba(0, 0, 0, 0.22);
+  backdrop-filter: blur(8px) saturate(150%);
+  -webkit-backdrop-filter: blur(8px) saturate(150%);
   padding: 24px;
+}
+.dark .ui-dialog-overlay {
+  background-color: rgba(0, 0, 0, 0.4);
 }
 .ui-dialog-content {
   position: fixed;
@@ -90,11 +95,13 @@ const contentStyle = computed(() => {
   flex-direction: column;
   width: calc(100% - 32px);
   max-height: 86vh;
-  border-radius: calc(var(--radius) * 1.5);
-  background-color: var(--popover);
+  border-radius: 12px;
+  background-color: var(--popover-glass);
+  backdrop-filter: saturate(var(--glass-saturate)) blur(var(--glass-popover-blur));
+  -webkit-backdrop-filter: saturate(var(--glass-saturate)) blur(var(--glass-popover-blur));
   color: var(--popover-foreground);
-  border: 1px solid var(--border);
-  box-shadow: var(--shadow-lg);
+  border: 0.5px solid transparent;
+  box-shadow: var(--glass-float-edge), var(--shadow-lg);
   overflow: hidden;
 }
 .ui-dialog-content--md {
@@ -112,9 +119,10 @@ const contentStyle = computed(() => {
 .ui-dialog-title {
   margin: 0;
   padding: 14px 16px 12px 16px;
+  font-family: var(--font-display);
   font-size: 15px;
   font-weight: 600;
-  border-bottom: 1px solid var(--border);
+  letter-spacing: -0.015em;
   flex-shrink: 0;
   padding-right: 40px;
   overflow: hidden;
@@ -123,25 +131,26 @@ const contentStyle = computed(() => {
 }
 .ui-dialog-close {
   position: absolute;
-  top: 12px;
-  right: 12px;
+  top: 11px;
+  right: 11px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
   width: 28px;
   height: 28px;
   border: none;
-  border-radius: var(--radius-sm);
+  border-radius: 50%;
   background: transparent;
   color: var(--muted-foreground);
-  cursor: pointer;
+  cursor: default;
+  transition: background-color 0.15s var(--ease-out), color 0.15s var(--ease-out);
 }
 .ui-dialog-close:hover {
   background-color: var(--accent);
-  color: var(--accent-foreground);
+  color: var(--foreground);
 }
 .ui-dialog-body {
-  padding: 16px;
+  padding: 4px 16px 16px;
   overflow: auto;
   min-height: 0;
   flex: 1;
@@ -157,8 +166,8 @@ const contentStyle = computed(() => {
   align-items: center;
   justify-content: flex-end;
   gap: 8px;
-  padding: 12px 16px;
-  border-top: 1px solid var(--border);
+  padding: 12px 16px 14px;
   flex-shrink: 0;
+  background: color-mix(in srgb, var(--muted) 50%, transparent);
 }
 </style>

@@ -43,7 +43,7 @@ const tooltipText = computed(() => {
   color: var(--primary);
 }
 .status-icon--success {
-  color: oklch(0.7 0.18 150);
+  color: var(--sys-green);
 }
 .status-icon--error {
   color: var(--destructive);

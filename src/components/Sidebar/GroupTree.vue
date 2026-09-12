@@ -6,14 +6,17 @@
 -->
 <template>
   <div class="flex h-full flex-col">
-    <div class="border-b border-border p-3">
-      <div class="mb-3 flex items-center gap-2">
+    <div class="hairline-b px-3 pb-3 pt-2">
+      <div class="mb-3 flex items-center gap-2.5 px-1">
         <SkinMascot :size="28" />
-        <span class="text-sm font-semibold">GitDash</span>
+        <div class="flex min-w-0 flex-col leading-tight">
+          <span class="text-[13px] font-semibold tracking-tight">GitDash</span>
+          <span class="text-[11px] text-muted-foreground">本地仓库</span>
+        </div>
       </div>
       <Button
         variant="ghost"
-        class="mb-1.5 w-full justify-start"
+        class="mb-1 w-full justify-start rounded-[6px] px-2.5"
         :class="isHomeRoute ? 'nav-active' : ''"
         @click="goHome"
       >
@@ -21,14 +24,18 @@
       </Button>
       <Button
         variant="ghost"
-        class="mb-1.5 w-full justify-start"
+        class="mb-2 w-full justify-start rounded-[6px] px-2.5"
         :class="isProjectsRoute ? 'nav-active' : ''"
         @click="goProjects"
       >
         <List :size="14" /> 项目
       </Button>
-      <Button variant="outline" class="w-full" @click="openAddGroup">
-        <Plus :size="14" /> 添加分组
+      <Button
+        variant="ghost"
+        class="w-full justify-center rounded-[6px] text-muted-foreground"
+        @click="openAddGroup"
+      >
+        <Plus :size="13" /> 添加分组
       </Button>
     </div>
 
@@ -518,18 +525,18 @@ async function doUnmanage() {
 
 <style scoped>
 .group-block {
-  border-radius: var(--radius-sm);
-  margin-bottom: 2px;
-  transition: background-color 0.15s ease;
+  border-radius: 8px;
+  margin-bottom: 1px;
+  transition: background-color 0.15s var(--ease-out);
 }
 .group-block--active > .group-header {
-  background-color: color-mix(in oklab, var(--primary) 16%, transparent);
-  color: var(--primary);
+  background-color: var(--primary);
+  color: #fff;
 }
 .group-block--drop-over {
-  background-color: color-mix(in oklab, var(--primary) 10%, transparent);
-  outline: 2px dashed var(--primary);
-  outline-offset: -2px;
+  background-color: color-mix(in srgb, var(--primary) 10%, transparent);
+  outline: 1.5px dashed color-mix(in srgb, var(--primary) 50%, transparent);
+  outline-offset: -1px;
 }
 .group-block--drop-over > .group-header {
   color: var(--primary);
@@ -537,19 +544,21 @@ async function doUnmanage() {
 .group-header {
   display: flex;
   align-items: center;
-  border-radius: var(--radius-sm);
-  cursor: pointer;
-  color: var(--muted-foreground);
+  border-radius: 8px;
+  cursor: default;
+  color: var(--foreground);
+  font-weight: 500;
+  transition: background-color 0.15s var(--ease-out), color 0.15s var(--ease-out);
 }
 .group-header:hover {
   background-color: var(--accent);
-  color: var(--accent-foreground);
+  color: var(--foreground);
 }
 /* 拖拽排序中的分组标题 */
 .group-header--sorting {
   opacity: 0.55;
   background-color: var(--accent);
-  color: var(--accent-foreground);
+  color: var(--foreground);
 }
 /* 排序插入位置指示线 */
 .group-header--sort-target-before {
@@ -587,6 +596,16 @@ async function doUnmanage() {
   padding: 7px 10px 7px 2px;
   outline: none;
 }
+.group-block--active .group-row-inner {
+  color: #fff;
+}
+.group-block--active .group-dot {
+  background-color: rgba(255, 255, 255, 0.9) !important;
+  box-shadow: 0 0 0 1.5px rgba(255, 255, 255, 0.25);
+}
+.group-block--active .group-count {
+  color: rgba(255, 255, 255, 0.75);
+}
 .group-dot {
   width: 10px;
   height: 10px;
@@ -613,15 +632,15 @@ async function doUnmanage() {
   align-items: center;
   gap: 8px;
   padding: 5px 10px;
-  border-radius: 5px;
+  border-radius: 6px;
   cursor: grab;
   color: var(--muted-foreground);
   font-size: 12px;
-  transition: background-color 0.15s ease;
+  transition: background-color 0.15s var(--ease-out), color 0.15s var(--ease-out);
 }
 .project-item:hover {
   background-color: var(--accent);
-  color: var(--accent-foreground);
+  color: var(--foreground);
 }
 .project-item:active {
   cursor: grabbing;
@@ -655,7 +674,10 @@ async function doUnmanage() {
   opacity: 0.85;
 }
 .nav-active {
-  background-color: color-mix(in oklab, var(--primary) 16%, transparent);
-  color: var(--primary);
+  background-color: var(--primary);
+  color: #fff;
+}
+.nav-active :deep(svg) {
+  color: #fff;
 }
 </style>

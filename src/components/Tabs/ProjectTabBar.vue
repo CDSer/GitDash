@@ -170,10 +170,12 @@ function closeAll() {
 .tab-bar {
   display: flex;
   align-items: stretch;
-  height: 36px;
+  height: 38px;
   flex-shrink: 0;
-  border-bottom: 1px solid var(--border);
-  background-color: var(--card);
+  box-shadow: var(--glass-specular), inset 0 -1px 0 0 var(--separator);
+  background-color: var(--sidebar-bg);
+  backdrop-filter: saturate(var(--glass-saturate)) blur(var(--glass-blur));
+  -webkit-backdrop-filter: saturate(var(--glass-saturate)) blur(var(--glass-blur));
 }
 .tab-strip {
   display: flex;
@@ -195,22 +197,25 @@ function closeAll() {
   min-width: 100px;
   height: 100%;
   padding: 0 8px 0 12px;
-  border-right: 1px solid var(--border);
-  cursor: pointer;
+  box-shadow: inset -1px 0 0 0 var(--separator);
+  cursor: default;
   color: var(--muted-foreground);
   font-size: 12px;
+  font-weight: 500;
+  letter-spacing: -0.01em;
   user-select: none;
   white-space: nowrap;
-  transition: background-color 0.12s ease, color 0.12s ease;
+  transition: background-color 0.15s var(--ease-out), color 0.15s var(--ease-out);
 }
 .tab-item:hover {
   background-color: var(--accent);
-  color: var(--accent-foreground);
+  color: var(--foreground);
 }
 .tab-item--active {
   background-color: var(--background);
   color: var(--foreground);
-  box-shadow: inset 0 -2px 0 0 var(--primary);
+  font-weight: 600;
+  box-shadow: inset 0 -2px 0 0 var(--primary), inset -1px 0 0 0 var(--separator);
 }
 .tab-item--system {
   min-width: 96px;
@@ -227,10 +232,10 @@ function closeAll() {
   background-color: transparent;
 }
 .tab-dot--ok {
-  background-color: oklch(0.65 0.16 150);
+  background-color: var(--sys-green);
 }
 .tab-dot--warn {
-  background-color: oklch(0.75 0.16 85);
+  background-color: var(--sys-orange);
 }
 .tab-dot--danger {
   background-color: var(--destructive);
@@ -240,7 +245,7 @@ function closeAll() {
 }
 .tab-dot--none {
   background-color: var(--muted-foreground);
-  opacity: 0.35;
+  opacity: 0.3;
 }
 .tab-label {
   flex: 1;
@@ -256,14 +261,16 @@ function closeAll() {
   border-radius: 4px;
   flex-shrink: 0;
   color: inherit;
-  opacity: 0.5;
+  opacity: 0;
+  transition: opacity 0.15s var(--ease-out), background-color 0.15s var(--ease-out);
+}
+.tab-item:hover .tab-close,
+.tab-item--active .tab-close {
+  opacity: 0.55;
 }
 .tab-close:hover {
-  background-color: var(--muted);
+  background-color: var(--accent);
   opacity: 1;
-}
-.tab-item:hover .tab-close {
-  opacity: 0.8;
 }
 .tab-add {
   display: flex;
@@ -272,10 +279,12 @@ function closeAll() {
   width: 36px;
   flex-shrink: 0;
   color: var(--muted-foreground);
+  cursor: default;
+  transition: background-color 0.15s var(--ease-out), color 0.15s var(--ease-out);
 }
 .tab-add:hover {
   background-color: var(--accent);
-  color: var(--accent-foreground);
+  color: var(--foreground);
 }
 .tab-actions {
   display: flex;

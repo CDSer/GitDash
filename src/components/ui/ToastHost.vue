@@ -113,15 +113,18 @@ function statusLabel(s: ToastItem['progressStatus']): string {
   display: flex;
   align-items: center;
   gap: 8px;
-  padding: 8px 14px;
-  border-radius: var(--radius-lg);
-  background-color: var(--popover);
+  padding: 9px 14px;
+  border-radius: 12px;
+  background-color: var(--popover-glass);
+  backdrop-filter: saturate(var(--glass-saturate)) blur(var(--glass-popover-blur));
+  -webkit-backdrop-filter: saturate(var(--glass-saturate)) blur(var(--glass-popover-blur));
   color: var(--popover-foreground);
-  border: 1px solid var(--border);
-  box-shadow: var(--shadow-md);
+  border: 0.5px solid transparent;
+  box-shadow: var(--glass-float-edge), var(--shadow-md);
   font-size: 13px;
+  letter-spacing: -0.01em;
   max-width: 80vw;
-  animation: toast-in 160ms cubic-bezier(0.16, 1, 0.3, 1);
+  animation: toast-in 180ms cubic-bezier(0.32, 0.72, 0, 1);
   pointer-events: auto;
 }
 
@@ -133,7 +136,7 @@ function statusLabel(s: ToastItem['progressStatus']): string {
 }
 
 .toast--success .toast-dot {
-  background-color: oklch(0.7 0.18 150);
+  background-color: var(--sys-green);
 }
 .toast--error .toast-dot {
   background-color: var(--destructive);
@@ -172,11 +175,11 @@ function statusLabel(s: ToastItem['progressStatus']): string {
 
 .toast--progress-running .progress-dot {
   background-color: var(--primary);
-  box-shadow: 0 0 0 0 color-mix(in oklab, var(--primary) 50%, transparent);
+  box-shadow: 0 0 0 0 color-mix(in srgb, var(--primary) 50%, transparent);
   animation: pulse-dot 1.2s ease-out infinite;
 }
 .toast--progress-success .progress-dot {
-  background-color: oklch(0.7 0.18 150);
+  background-color: var(--sys-green);
 }
 .toast--progress-error .progress-dot {
   background-color: var(--destructive);
@@ -211,21 +214,22 @@ function statusLabel(s: ToastItem['progressStatus']): string {
   width: 28px;
   height: 28px;
   border: none;
-  border-radius: var(--radius-sm);
+  border-radius: 6px;
   background: transparent;
   color: var(--muted-foreground);
-  cursor: pointer;
+  cursor: default;
   flex-shrink: 0;
+  transition: background-color 0.15s var(--ease-out), color 0.15s var(--ease-out);
 }
 .progress-toggle:hover,
 .progress-close:hover {
   background: var(--accent);
-  color: var(--accent-foreground);
+  color: var(--foreground);
 }
 
 .progress-body {
-  border-top: 1px solid var(--border);
-  background: color-mix(in oklab, var(--background) 70%, var(--card));
+  box-shadow: inset 0 1px 0 0 var(--separator);
+  background: color-mix(in srgb, var(--muted) 40%, transparent);
 }
 
 .progress-log {
@@ -251,7 +255,7 @@ function statusLabel(s: ToastItem['progressStatus']): string {
 
 .progress-bar {
   height: 2px;
-  background: color-mix(in oklab, var(--primary) 12%, transparent);
+  background: color-mix(in srgb, var(--primary) 12%, transparent);
   overflow: hidden;
 }
 
@@ -264,7 +268,7 @@ function statusLabel(s: ToastItem['progressStatus']): string {
 
 @keyframes pulse-dot {
   0% {
-    box-shadow: 0 0 0 0 color-mix(in oklab, var(--primary) 45%, transparent);
+    box-shadow: 0 0 0 0 color-mix(in srgb, var(--primary) 45%, transparent);
   }
   70% {
     box-shadow: 0 0 0 8px transparent;

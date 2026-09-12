@@ -451,10 +451,10 @@ function closeModal() {
   font-size: 13px;
 }
 .result-success {
-  color: oklch(0.6 0.16 150);
+  color: var(--sys-green);
 }
 .result-skipped {
-  color: oklch(0.7 0.15 75);
+  color: var(--sys-orange);
 }
 .result-failed {
   color: var(--destructive);

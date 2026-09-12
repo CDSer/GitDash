@@ -187,13 +187,16 @@ onBeforeUnmount(() => {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  height: 40px;
+  height: 44px;
   flex-shrink: 0;
-  border-bottom: 1px solid var(--border);
-  background: var(--card);
+  box-shadow: var(--glass-specular), inset 0 -1px 0 0 var(--separator);
+  background: var(--toolbar-bg);
+  backdrop-filter: saturate(var(--glass-saturate)) blur(var(--glass-blur));
+  -webkit-backdrop-filter: saturate(var(--glass-saturate)) blur(var(--glass-blur));
   user-select: none;
+  letter-spacing: -0.01em;
   /* 非 macOS / 全屏默认边距；macOS 非全屏时由 toolbarStyle 覆盖为实测 inset */
-  padding: 0 8px;
+  padding: 0 10px;
 }
 
 .toolbar-left,
@@ -215,50 +218,55 @@ onBeforeUnmount(() => {
   display: flex;
   align-items: center;
   gap: 6px;
-  height: 32px;
+  height: 28px;
   padding: 0 10px;
   border: none;
-  border-radius: var(--radius-sm);
+  border-radius: 6px;
   background: transparent;
   color: var(--foreground);
   font-size: 13px;
-  cursor: pointer;
-  transition: background-color 0.12s;
+  font-weight: 500;
+  cursor: default;
+  transition: background-color 0.15s var(--ease-out);
 }
 .toolbar-btn:hover {
   background: var(--accent);
   color: var(--accent-foreground);
+}
+.toolbar-btn:active {
+  background: color-mix(in srgb, var(--accent) 70%, var(--foreground) 8%);
 }
 
 .toolbar-icon-btn {
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 32px;
-  height: 32px;
+  width: 28px;
+  height: 28px;
   border: none;
-  border-radius: var(--radius-sm);
+  border-radius: 6px;
   background: transparent;
   color: var(--muted-foreground);
-  cursor: pointer;
-  transition: background-color 0.12s, color 0.12s;
+  cursor: default;
+  transition: background-color 0.15s var(--ease-out), color 0.15s var(--ease-out);
 }
 .toolbar-icon-btn:hover {
   background: var(--accent);
-  color: var(--accent-foreground);
+  color: var(--foreground);
 }
 
 .toolbar-meta {
-  margin-right: 8px;
+  margin-right: 10px;
   font-size: 12px;
   color: var(--muted-foreground);
+  letter-spacing: -0.01em;
 }
 
 .toolbar-divider {
   width: 1px;
-  height: 20px;
+  height: 16px;
   margin: 0 6px;
-  background: var(--border);
+  background: var(--separator);
   flex-shrink: 0;
 }
 

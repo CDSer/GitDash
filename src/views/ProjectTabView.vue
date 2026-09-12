@@ -12,8 +12,8 @@
         <span v-if="status?.is_detached" class="tab-path">分离 HEAD</span>
         <span v-else class="tab-path">{{ status?.branch || project.path }}</span>
         <span v-if="status && (status.ahead || status.behind)" class="tab-ab">
-          <span v-if="status.ahead" class="text-emerald-600">↑{{ status.ahead }}</span>
-          <span v-if="status.behind" class="text-amber-600">↓{{ status.behind }}</span>
+          <span v-if="status.ahead" class="text-[color:var(--sys-green)]">↑{{ status.ahead }}</span>
+          <span v-if="status.behind" class="text-[color:var(--sys-orange)]">↓{{ status.behind }}</span>
         </span>
       </div>
 
@@ -246,11 +246,13 @@ async function onPush() {
   display: flex;
   align-items: center;
   gap: 12px;
-  height: 44px;
+  height: 48px;
   flex-shrink: 0;
-  padding: 0 12px;
-  border-bottom: 1px solid var(--border);
-  background-color: var(--card);
+  padding: 0 16px;
+  box-shadow: var(--glass-specular), inset 0 -1px 0 0 var(--separator);
+  background-color: var(--toolbar-bg);
+  backdrop-filter: saturate(var(--glass-saturate)) blur(var(--glass-blur));
+  -webkit-backdrop-filter: saturate(var(--glass-saturate)) blur(var(--glass-blur));
 }
 .tab-header-left {
   display: flex;
@@ -262,6 +264,7 @@ async function onPush() {
 .tab-project-name {
   font-size: 13px;
   font-weight: 600;
+  letter-spacing: -0.015em;
   white-space: nowrap;
 }
 .tab-path {
@@ -296,15 +299,16 @@ async function onPush() {
   font-size: 12px;
   font-weight: 500;
   color: var(--muted-foreground);
-  transition: background-color 0.12s ease, color 0.12s ease;
+  cursor: default;
+  transition: background-color 0.15s var(--ease-out), color 0.15s var(--ease-out);
 }
 .mode-btn:hover {
   color: var(--foreground);
 }
 .mode-btn--active {
-  background-color: var(--background);
+  background-color: var(--card);
   color: var(--foreground);
-  box-shadow: 0 1px 2px color-mix(in oklab, var(--foreground) 8%, transparent);
+  box-shadow: 0 0.5px 1.5px rgba(0, 0, 0, 0.08), 0 1px 2px rgba(0, 0, 0, 0.04);
 }
 .mode-badge {
   display: inline-flex;

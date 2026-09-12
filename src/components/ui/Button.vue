@@ -30,16 +30,20 @@ const props = withDefaults(
 const emit = defineEmits<{ (e: 'click', ev: MouseEvent): void }>();
 
 const base =
-  'inline-flex items-center justify-center gap-1.5 whitespace-nowrap rounded-md font-medium transition-colors ' +
-  'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1 ' +
-  'disabled:pointer-events-none disabled:opacity-50 select-none';
+  'inline-flex items-center justify-center gap-1.5 whitespace-nowrap rounded-[6px] font-medium ' +
+  'transition-colors duration-150 ease-[cubic-bezier(0.25,0.1,0.25,1)] ' +
+  'focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-primary/28 ' +
+  'disabled:pointer-events-none disabled:opacity-40 select-none cursor-default active:scale-[0.98]';
 
 const variants: Record<Variant, string> = {
-  primary: 'bg-primary text-primary-foreground hover:bg-primary/90',
-  default: 'bg-secondary text-secondary-foreground hover:bg-secondary/80',
-  outline: 'border border-border bg-transparent hover:bg-accent hover:text-accent-foreground',
-  ghost: 'bg-transparent hover:bg-accent hover:text-accent-foreground',
-  destructive: 'bg-destructive text-destructive-foreground hover:bg-destructive/90',
+  primary: 'bg-primary text-primary-foreground hover:bg-primary/90 shadow-[0_0.5px_1px_rgba(0,0,0,0.08)]',
+  default:
+    'bg-secondary text-secondary-foreground hover:bg-secondary/70 shadow-[0_0.5px_1px_rgba(0,0,0,0.06)]',
+  outline:
+    'border-[0.5px] border-border bg-card/60 text-foreground hover:bg-accent hover:text-accent-foreground',
+  ghost: 'bg-transparent text-foreground hover:bg-accent hover:text-accent-foreground',
+  destructive:
+    'bg-destructive text-destructive-foreground hover:bg-destructive/90 shadow-[0_0.5px_1px_rgba(0,0,0,0.08)]',
 };
 
 const sizes: Record<Size, string> = {

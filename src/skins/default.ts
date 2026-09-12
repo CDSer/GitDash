@@ -7,10 +7,10 @@ export const defaultSkin: SkinDef = {
   name: '默认',
   description: 'GitDash 原生 indigo 主题',
   preview: {
-    primary: 'oklch(0.55 0.2 264)',
-    accent: 'oklch(0.94 0.01 260)',
+    primary: '#007AFF',
+    accent: '#E9E9EB',
     cardLight: '#ffffff',
-    cardDark: '#1e2028',
+    cardDark: '#2c2c2e',
   },
   tokens: {
     light: {},

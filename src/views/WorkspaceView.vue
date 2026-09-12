@@ -6,14 +6,14 @@
   <div class="flex h-full flex-col overflow-hidden">
     <header
       v-if="!embedded"
-      class="flex h-12 shrink-0 items-center justify-between border-b border-border bg-card px-4"
+      class="surface-toolbar flex h-12 shrink-0 items-center justify-between hairline-b px-4"
     >
       <div class="flex min-w-0 items-center gap-2">
         <Button variant="ghost" size="sm" @click="backToProjects">
           <ArrowLeft :size="14" /> 返回项目列表
         </Button>
         <Divider direction="vertical" />
-        <span class="font-semibold">{{ project?.name }}</span>
+        <span class="font-semibold tracking-tight">{{ project?.name }}</span>
         <span class="truncate text-xs text-muted-foreground">{{ project?.path }}</span>
       </div>
       <div class="flex items-center gap-2">
@@ -28,7 +28,10 @@
       </div>
     </header>
 
-    <div v-else class="flex h-9 shrink-0 items-center justify-end border-b border-border bg-card px-2">
+    <div
+      v-else
+      class="surface-toolbar flex h-10 shrink-0 items-center justify-end hairline-b px-2"
+    >
       <Button
         variant="ghost"
         size="sm"
@@ -40,23 +43,23 @@
     </div>
 
     <div class="flex min-h-0 flex-1">
-      <aside class="w-[260px] shrink-0 flex flex-col overflow-hidden border-r border-border bg-card">
+      <aside class="surface-sidebar flex w-[260px] shrink-0 flex-col overflow-hidden hairline-r">
         <FileTree v-if="project" :root-path="project.path" @open-file="onOpenFile" />
       </aside>
 
       <main class="flex min-w-0 flex-1 flex-col overflow-hidden">
         <div v-if="tabs.length" class="flex min-h-0 flex-1 flex-col">
           <div
-            class="flex h-9 shrink-0 items-stretch overflow-x-auto border-b border-border bg-card"
+            class="surface-toolbar flex h-10 shrink-0 items-stretch overflow-x-auto hairline-b"
           >
             <div
               v-for="tab in tabs"
               :key="tab.path"
               :class="[
-                'flex cursor-pointer items-center gap-1.5 border-r border-border px-2.5 text-[13px]',
+                'flex cursor-default items-center gap-1.5 px-3 text-[12px] tracking-tight hairline-r',
                 tab.path === activePath
-                  ? 'bg-background text-foreground'
-                  : 'text-muted-foreground hover:bg-accent',
+                  ? 'bg-background font-semibold text-foreground shadow-[inset_0_-2px_0_0_var(--primary)]'
+                  : 'text-muted-foreground hover:bg-accent hover:text-foreground',
                 isDirty(tab) ? 'font-medium' : '',
               ]"
               :title="tab.path"
@@ -92,7 +95,7 @@
         </div>
         <Empty v-else description="从左侧选择文件查看或编辑" />
 
-        <div v-if="showGitPanel && project" class="h-80 shrink-0 border-t border-border min-h-0">
+        <div v-if="showGitPanel && project" class="h-80 shrink-0 min-h-0 hairline-t">
           <GitGraphPanel :project-id="project.id" @close="showGitPanel = false" />
         </div>
       </main>

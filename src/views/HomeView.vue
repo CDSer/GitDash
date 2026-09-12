@@ -601,13 +601,16 @@ onMounted(async () => {
 }
 .home-title {
   margin: 0;
-  font-size: 20px;
-  font-weight: 600;
+  font-family: var(--font-display);
+  font-size: 28px;
+  font-weight: 700;
+  letter-spacing: -0.025em;
 }
 .home-subtitle {
-  margin: 4px 0 0;
-  font-size: 12px;
+  margin: 6px 0 0;
+  font-size: 13px;
   color: var(--muted-foreground);
+  letter-spacing: -0.01em;
 }
 .home-actions {
   display: flex;
@@ -631,27 +634,33 @@ onMounted(async () => {
   margin-bottom: 12px;
 }
 .stat-card {
-  border: 1px solid var(--border);
-  border-radius: 10px;
+  border: 0.5px solid var(--separator);
+  border-radius: 12px;
   background-color: var(--card);
-  padding: 12px 14px;
+  padding: 14px 16px;
+  box-shadow: var(--shadow-sm);
 }
 .stat-label {
   font-size: 11px;
+  font-weight: 500;
+  letter-spacing: 0.01em;
   color: var(--muted-foreground);
 }
 .stat-value {
-  margin-top: 6px;
-  font-size: 24px;
-  font-weight: 600;
-  line-height: 1.15;
+  margin-top: 8px;
+  font-family: var(--font-display);
+  font-size: 28px;
+  font-weight: 700;
+  letter-spacing: -0.03em;
+  line-height: 1.1;
   color: var(--foreground);
 }
 .stat-value--sm {
   font-size: 18px;
+  font-weight: 600;
 }
 .stat-value--warn {
-  color: oklch(0.7 0.16 75);
+  color: var(--sys-orange);
 }
 .stat-value--danger {
   color: var(--destructive);
@@ -669,22 +678,24 @@ onMounted(async () => {
 }
 
 .panel {
-  border: 1px solid var(--border);
-  border-radius: 10px;
+  border: 0.5px solid var(--separator);
+  border-radius: 12px;
   background-color: var(--card);
-  padding: 12px 14px 14px;
+  padding: 14px 16px 16px;
   min-height: 0;
+  box-shadow: var(--shadow-sm);
 }
 .panel-head {
   display: flex;
   align-items: center;
   gap: 8px;
-  margin-bottom: 10px;
+  margin-bottom: 12px;
 }
 .panel-title {
   margin: 0;
   font-size: 13px;
   font-weight: 600;
+  letter-spacing: -0.015em;
 }
 .panel-count {
   font-size: 11px;
@@ -703,7 +714,7 @@ onMounted(async () => {
 .panel-empty--ok {
   flex-direction: row;
   min-height: 160px;
-  color: oklch(0.6 0.14 150);
+  color: var(--sys-green);
 }
 .panel-empty--inline {
   min-height: 40px;
@@ -735,7 +746,7 @@ onMounted(async () => {
   border-color: color-mix(in oklab, var(--destructive) 35%, var(--border));
 }
 .attention-row--in-progress {
-  border-color: color-mix(in oklab, oklch(0.8 0.16 85) 40%, var(--border));
+  border-color: color-mix(in srgb, var(--sys-orange) 40%, var(--border));
 }
 .attention-dot {
   width: 8px;
@@ -748,10 +759,10 @@ onMounted(async () => {
   background-color: var(--destructive);
 }
 .attention-row--in-progress .attention-dot {
-  background-color: oklch(0.75 0.16 85);
+  background-color: var(--sys-orange);
 }
 .attention-row--error .attention-dot {
-  background-color: oklch(0.6 0.15 40);
+  background-color: var(--sys-green);
 }
 .attention-body {
   flex: 1;
@@ -946,10 +957,10 @@ onMounted(async () => {
   background-color: var(--destructive);
 }
 .fav-dot--warn {
-  background-color: oklch(0.75 0.16 85);
+  background-color: var(--sys-orange);
 }
 .fav-dot--ok {
-  background-color: oklch(0.65 0.16 150);
+  background-color: var(--sys-green);
 }
 .fav-dot--info {
   background-color: var(--primary);

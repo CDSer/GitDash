@@ -16,7 +16,7 @@
     <div class="flex min-h-0 flex-1">
       <aside
         ref="sidebarRef"
-        class="global-sidebar relative flex shrink-0 flex-col overflow-hidden border-r border-border bg-card"
+        class="global-sidebar surface-sidebar relative flex shrink-0 flex-col overflow-hidden"
         :class="{ collapsed: sidebarCollapsed, resizing: isResizing }"
       >
         <div v-if="!sidebarCollapsed" class="flex h-full flex-col">
@@ -26,7 +26,7 @@
         <!-- 收起状态：窄条 + 展开按钮 -->
         <div
           v-else
-          class="flex h-full flex-col items-center border-r border-border bg-card py-2"
+          class="surface-sidebar flex h-full flex-col items-center py-2"
         >
           <Button variant="ghost" size="icon" title="展开侧边栏" @click="toggleSidebar">
             <PanelLeftOpen :size="18" />
@@ -237,27 +237,28 @@ function startResize(e: PointerEvent) {
 <style scoped>
 aside {
   width: var(--sidebar-width, 220px);
-  transition: width 0.2s ease-out;
+  box-shadow: var(--glass-specular), inset -1px 0 0 0 var(--separator);
+  transition: width 0.25s var(--ease-out);
 }
 aside.resizing {
   transition: none;
 }
 aside.collapsed {
-  width: 44px;
+  width: 48px;
 }
 .resizer {
   position: absolute;
   right: 0;
   top: 0;
   bottom: 0;
-  width: 4px;
+  width: 5px;
   cursor: col-resize;
   background-color: transparent;
-  transition: background-color 0.15s ease;
+  transition: background-color 0.15s var(--ease-out);
   z-index: 10;
 }
 .resizer:hover,
 .resizer:active {
-  background-color: var(--primary);
+  background-color: color-mix(in srgb, var(--primary) 55%, transparent);
 }
 </style>

@@ -105,19 +105,21 @@ function operationText(operation: string) {
   z-index: 2000;
   display: flex;
   flex-direction: column;
-  border-radius: 10px;
-  border: 1px solid var(--border);
-  background-color: var(--popover);
+  border-radius: 12px;
+  border: 0.5px solid transparent;
+  background-color: var(--popover-glass);
+  backdrop-filter: saturate(var(--glass-saturate)) blur(var(--glass-popover-blur));
+  -webkit-backdrop-filter: saturate(var(--glass-saturate)) blur(var(--glass-popover-blur));
   color: var(--popover-foreground);
-  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.25);
+  box-shadow: var(--glass-float-edge), var(--shadow-lg);
   overflow: hidden;
 }
 .queue-header {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 8px 10px;
-  border-bottom: 1px solid var(--border);
+  padding: 10px 12px;
+  box-shadow: inset 0 -1px 0 0 var(--separator);
 }
 .queue-summary {
   font-size: 11px;
@@ -125,8 +127,9 @@ function operationText(operation: string) {
   margin-right: 4px;
 }
 .queue-title {
-  font-size: 14px;
+  font-size: 13px;
   font-weight: 600;
+  letter-spacing: -0.01em;
 }
 .header-actions {
   display: flex;
@@ -137,7 +140,7 @@ function operationText(operation: string) {
   padding: 4px 12px 10px;
 }
 .task-item + .task-item {
-  border-top: 1px solid var(--border);
+  border-top: 1px solid var(--separator);
 }
 .task-item {
   padding: 6px 0;

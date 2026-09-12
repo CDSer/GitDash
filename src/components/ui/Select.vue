@@ -9,7 +9,7 @@
       <span :class="cn('truncate', !selectedLabel && 'text-muted-foreground')">
         {{ selectedLabel || placeholder }}
       </span>
-      <ChevronDown class="ui-select-caret" :size="14" />
+      <ChevronDown class="ui-select-caret" :size="13" />
     </button>
 
     <div v-if="open" class="ui-select-panel" @click.stop>
@@ -84,22 +84,27 @@ onBeforeUnmount(() => document.removeEventListener('mousedown', onDocClick));
   justify-content: space-between;
   gap: 6px;
   width: 100%;
-  height: 32px;
-  padding: 0 8px;
+  height: 28px;
+  padding: 0 8px 0 10px;
   font-size: 13px;
-  border-radius: var(--radius-sm);
-  border: 1px solid var(--input);
-  background-color: transparent;
+  border-radius: 6px;
+  border: 0.5px solid var(--input);
+  background-color: color-mix(in srgb, var(--card) 80%, transparent);
   color: var(--foreground);
-  cursor: pointer;
+  cursor: default;
+  transition: border-color 0.15s var(--ease-out), box-shadow 0.15s var(--ease-out);
 }
-.ui-select-trigger.is-open,
 .ui-select-trigger:hover {
+  border-color: color-mix(in srgb, var(--input) 70%, var(--muted-foreground));
+}
+.ui-select-trigger.is-open {
   border-color: var(--ring);
+  box-shadow: 0 0 0 3.5px color-mix(in srgb, var(--ring) 28%, transparent);
 }
 .ui-select-caret {
   flex-shrink: 0;
   color: var(--muted-foreground);
+  opacity: 0.7;
 }
 .ui-select-panel {
   position: absolute;
@@ -110,11 +115,13 @@ onBeforeUnmount(() => document.removeEventListener('mousedown', onDocClick));
   max-height: 260px;
   overflow-y: auto;
   padding: 4px;
-  border-radius: var(--radius-lg);
-  border: 1px solid var(--border);
-  background-color: var(--popover);
+  border-radius: 8px;
+  border: 0.5px solid transparent;
+  background-color: var(--popover-glass);
+  backdrop-filter: saturate(var(--glass-saturate)) blur(var(--glass-popover-blur));
+  -webkit-backdrop-filter: saturate(var(--glass-saturate)) blur(var(--glass-popover-blur));
   color: var(--popover-foreground);
-  box-shadow: var(--shadow-md);
+  box-shadow: var(--glass-float-edge), var(--shadow-md);
 }
 .ui-select-option {
   display: flex;
@@ -124,22 +131,28 @@ onBeforeUnmount(() => document.removeEventListener('mousedown', onDocClick));
   padding: 6px 8px;
   font-size: 13px;
   border: none;
-  border-radius: var(--radius-sm);
+  border-radius: 5px;
   background: transparent;
   color: inherit;
   text-align: left;
-  cursor: pointer;
+  cursor: default;
 }
 .ui-select-option:hover {
-  background-color: var(--accent);
-  color: var(--accent-foreground);
+  background-color: var(--primary);
+  color: #fff;
 }
 .ui-select-option.active {
   color: var(--primary);
 }
+.ui-select-option:hover.active {
+  color: #fff;
+}
 .ui-select-check {
   flex-shrink: 0;
   color: var(--primary);
+}
+.ui-select-option:hover .ui-select-check {
+  color: #fff;
 }
 .ui-select-empty {
   padding: 8px;

@@ -1,15 +1,17 @@
 @import "tailwindcss";
 @import "tw-animate-css";
 
-/* GitDash 设计令牌（参照 terax「源码内嵌 + Tailwind」方式）
-   颜色通过 CSS 变量定义 light/dark，再用 @theme inline 映射到 Tailwind 工具类，
-   从而可直接使用 bg-background / text-foreground / border-border / bg-muted 等。 */
+/* GitDash — Apple HIG 桌面语言
+   以 macOS 系统色板为基座：中性灰阶 + 系统蓝强调，层级靠字号字重
+   而非颜色；分隔用发丝线与留白，chrome 面用半透明模糊。 */
 @custom-variant dark (&:is(.dark *));
 
 @theme inline {
-  --font-sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue",
-    Arial, "PingFang SC", "Microsoft YaHei", sans-serif;
-  --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  --font-sans: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Helvetica Neue",
+    "PingFang SC", "Microsoft YaHei", sans-serif;
+  --font-display: -apple-system, BlinkMacSystemFont, "SF Pro Display", "Helvetica Neue",
+    "PingFang SC", "Microsoft YaHei", sans-serif;
+  --font-mono: ui-monospace, "SF Mono", "JetBrains Mono", Menlo, Consolas, monospace;
 
   --color-background: var(--background);
   --color-foreground: var(--foreground);
@@ -30,6 +32,9 @@
   --color-border: var(--border);
   --color-input: var(--input);
   --color-ring: var(--ring);
+  --color-sidebar: var(--sidebar-bg);
+  --color-toolbar: var(--toolbar-bg);
+  --color-separator: var(--separator);
 
   --radius-sm: calc(var(--radius) * 0.6);
   --radius-md: calc(var(--radius) * 0.8);
@@ -38,56 +43,114 @@
 }
 
 :root {
-  --background: oklch(1 0 0);
-  --foreground: oklch(0.205 0 0);
-  --card: oklch(1 0 0);
-  --card-foreground: oklch(0.205 0 0);
-  --popover: oklch(1 0 0);
-  --popover-foreground: oklch(0.205 0 0);
-  --primary: oklch(0.55 0.2 264);
-  --primary-foreground: oklch(0.985 0 0);
-  --secondary: oklch(0.96 0.005 250);
-  --secondary-foreground: oklch(0.25 0.02 260);
-  --muted: oklch(0.96 0.005 250);
-  --muted-foreground: oklch(0.55 0.02 260);
-  --accent: oklch(0.94 0.01 260);
-  --accent-foreground: oklch(0.25 0.02 260);
-  --destructive: oklch(0.58 0.22 27);
-  --destructive-foreground: oklch(0.985 0 0);
-  --border: oklch(0.9 0.01 250);
-  --input: oklch(0.9 0.01 250);
-  --ring: oklch(0.55 0.2 264);
-  --radius: 0.5rem;
-  --shadow-sm: 0 1px 2px rgb(0 0 0 / 0.05);
-  --shadow-md: 0 4px 14px rgb(0 0 0 / 0.08);
-  --shadow-lg: 0 16px 48px rgb(0 0 0 / 0.22);
-  --shadow-card: var(--shadow-md);
+  /* 页面 / 窗口底：Apple 浅灰 */
+  --background: #f5f5f7;
+  --foreground: #1d1d1f;
+  --card: #ffffff;
+  --card-foreground: #1d1d1f;
+  --popover: #ffffff;
+  --popover-foreground: #1d1d1f;
+
+  /* 系统蓝 — 唯一强调色 */
+  --primary: #007aff;
+  --primary-foreground: #ffffff;
+  --secondary: #f2f2f7;
+  --secondary-foreground: #1d1d1f;
+  --muted: #f2f2f7;
+  --muted-foreground: #6e6e73;
+  --accent: rgba(0, 0, 0, 0.05);
+  --accent-foreground: #1d1d1f;
+  --destructive: #ff3b30;
+  --destructive-foreground: #ffffff;
+
+  /* 发丝分隔线（Apple 系统 separator） */
+  --border: rgba(0, 0, 0, 0.08);
+  --separator: rgba(0, 0, 0, 0.1);
+  --input: rgba(0, 0, 0, 0.12);
+  --ring: #007aff;
+
+  /* Liquid Glass chrome — 更高透明度 + 强模糊，内容色温从背后渗出 */
+  --sidebar-bg: rgba(246, 246, 248, 0.52);
+  --toolbar-bg: rgba(246, 246, 248, 0.58);
+  --material-bg: rgba(255, 255, 255, 0.48);
+  /* 浮层玻璃（菜单 / 对话框 / Toast / 队列）比 chrome 更透但更强模糊 */
+  --popover-glass: rgba(255, 255, 255, 0.78);
+  --glass-blur: 36px;
+  --glass-saturate: 200%;
+  --glass-popover-blur: 40px;
+  /* 镜面边缘：顶光 + 细描边（Liquid Glass 厚度感） */
+  --glass-specular: inset 0 0.5px 0 0 rgba(255, 255, 255, 0.85);
+  --glass-rim: inset 0 0 0 0.5px rgba(0, 0, 0, 0.06);
+  --glass-float-edge: inset 0 0.5px 0 0 rgba(255, 255, 255, 0.9),
+    inset 0 0 0 0.5px rgba(0, 0, 0, 0.07);
+
+  /* 系统语义色 */
+  --sys-green: #34c759;
+  --sys-orange: #ff9500;
+  --sys-yellow: #ffcc00;
+  --sys-red: #ff3b30;
+  --sys-blue: #007aff;
+  --sys-indigo: #5856d6;
+  --sys-pink: #ff2d55;
+  --sys-teal: #30b0c7;
+
+  --radius: 10px;
+  --shadow-sm: 0 0.5px 1px rgba(0, 0, 0, 0.06), 0 1px 2px rgba(0, 0, 0, 0.04);
+  --shadow-md: 0 1px 3px rgba(0, 0, 0, 0.06), 0 6px 20px rgba(0, 0, 0, 0.08);
+  --shadow-lg: 0 8px 28px rgba(0, 0, 0, 0.18), 0 2px 6px rgba(0, 0, 0, 0.06);
+  --shadow-card: 0 1px 2px rgba(0, 0, 0, 0.04), 0 4px 16px rgba(0, 0, 0, 0.06);
+
+  /* 缓动：Apple 标准 ease-out */
+  --ease-out: cubic-bezier(0.25, 0.1, 0.25, 1);
+  --ease-spring: cubic-bezier(0.32, 0.72, 0, 1);
 }
 
 .dark {
-  --background: oklch(0.18 0.01 264);
-  --foreground: oklch(0.95 0.005 264);
-  --card: oklch(0.22 0.012 264);
-  --card-foreground: oklch(0.95 0.005 264);
-  --popover: oklch(0.22 0.012 264);
-  --popover-foreground: oklch(0.95 0.005 264);
-  --primary: oklch(0.65 0.18 264);
-  --primary-foreground: oklch(0.18 0.01 264);
-  --secondary: oklch(0.28 0.015 264);
-  --secondary-foreground: oklch(0.95 0.005 264);
-  --muted: oklch(0.28 0.015 264);
-  --muted-foreground: oklch(0.7 0.02 264);
-  --accent: oklch(0.32 0.02 264);
-  --accent-foreground: oklch(0.98 0.005 264);
-  --destructive: oklch(0.7 0.19 27);
-  --destructive-foreground: oklch(0.98 0.005 264);
-  --border: oklch(1 0 0 / 12%);
-  --input: oklch(1 0 0 / 16%);
-  --ring: oklch(0.65 0.18 264);
-  --shadow-sm: 0 1px 2px rgb(0 0 0 / 0.35);
-  --shadow-md: 0 4px 14px rgb(0 0 0 / 0.4);
-  --shadow-lg: 0 16px 48px rgb(0 0 0 / 0.5);
-  --shadow-card: var(--shadow-md);
+  --background: #1c1c1e;
+  --foreground: #f5f5f7;
+  --card: #2c2c2e;
+  --card-foreground: #f5f5f7;
+  --popover: #2c2c2e;
+  --popover-foreground: #f5f5f7;
+
+  --primary: #0a84ff;
+  --primary-foreground: #ffffff;
+  --secondary: #2c2c2e;
+  --secondary-foreground: #f5f5f7;
+  --muted: #3a3a3c;
+  --muted-foreground: #98989d;
+  --accent: rgba(255, 255, 255, 0.08);
+  --accent-foreground: #f5f5f7;
+  --destructive: #ff453a;
+  --destructive-foreground: #ffffff;
+
+  --border: rgba(255, 255, 255, 0.1);
+  --separator: rgba(255, 255, 255, 0.14);
+  --input: rgba(255, 255, 255, 0.16);
+  --ring: #0a84ff;
+
+  --sidebar-bg: rgba(44, 44, 46, 0.52);
+  --toolbar-bg: rgba(44, 44, 46, 0.58);
+  --material-bg: rgba(44, 44, 46, 0.48);
+  --popover-glass: rgba(44, 44, 46, 0.78);
+  --glass-specular: inset 0 0.5px 0 0 rgba(255, 255, 255, 0.16);
+  --glass-rim: inset 0 0 0 0.5px rgba(255, 255, 255, 0.1);
+  --glass-float-edge: inset 0 0.5px 0 0 rgba(255, 255, 255, 0.18),
+    inset 0 0 0 0.5px rgba(255, 255, 255, 0.1);
+
+  --sys-green: #30d158;
+  --sys-orange: #ff9f0a;
+  --sys-yellow: #ffd60a;
+  --sys-red: #ff453a;
+  --sys-blue: #0a84ff;
+  --sys-indigo: #5e5ce6;
+  --sys-pink: #ff375f;
+  --sys-teal: #40c8e0;
+
+  --shadow-sm: 0 0.5px 1px rgba(0, 0, 0, 0.35), 0 1px 2px rgba(0, 0, 0, 0.25);
+  --shadow-md: 0 1px 3px rgba(0, 0, 0, 0.4), 0 8px 24px rgba(0, 0, 0, 0.35);
+  --shadow-lg: 0 10px 36px rgba(0, 0, 0, 0.55), 0 2px 8px rgba(0, 0, 0, 0.3);
+  --shadow-card: 0 1px 2px rgba(0, 0, 0, 0.3), 0 6px 20px rgba(0, 0, 0, 0.25);
 }
 
 @layer base {
@@ -106,6 +169,9 @@
     background-color: var(--background);
     color: var(--foreground);
     font-family: var(--font-sans);
+    font-size: 13px;
+    line-height: 1.45;
+    letter-spacing: -0.01em;
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
     overflow: hidden;
@@ -115,12 +181,59 @@
   #app {
     user-select: none;
   }
+
+  /* Apple 焦点环：系统蓝、无偏移 */
+  :focus-visible {
+    outline: 3px solid color-mix(in srgb, var(--ring) 45%, transparent);
+    outline-offset: 1px;
+  }
 }
 
-/* 细滚动条（桌面应用需要可见滚动提示） */
+/* ===== Liquid Glass 表面 ===== */
+.material {
+  background: var(--material-bg);
+  backdrop-filter: saturate(var(--glass-saturate)) blur(var(--glass-blur));
+  -webkit-backdrop-filter: saturate(var(--glass-saturate)) blur(var(--glass-blur));
+}
+
+.surface-sidebar {
+  background: var(--sidebar-bg);
+  backdrop-filter: saturate(var(--glass-saturate)) blur(var(--glass-blur));
+  -webkit-backdrop-filter: saturate(var(--glass-saturate)) blur(var(--glass-blur));
+}
+
+.surface-toolbar {
+  background: var(--toolbar-bg);
+  backdrop-filter: saturate(var(--glass-saturate)) blur(var(--glass-blur));
+  -webkit-backdrop-filter: saturate(var(--glass-saturate)) blur(var(--glass-blur));
+  box-shadow: var(--glass-specular), var(--glass-rim);
+}
+
+/* 浮层玻璃：下拉 / 对话框 / Toast / 任务队列共用 */
+.glass-float {
+  background-color: var(--popover-glass);
+  backdrop-filter: saturate(var(--glass-saturate)) blur(var(--glass-popover-blur));
+  -webkit-backdrop-filter: saturate(var(--glass-saturate)) blur(var(--glass-popover-blur));
+  color: var(--popover-foreground);
+  border: 0.5px solid transparent;
+  box-shadow: var(--glass-float-edge), var(--shadow-lg);
+}
+
+/* 发丝线分隔（替代硬边框）；顶光给 chrome 一层玻璃厚度 */
+.hairline-b {
+  box-shadow: var(--glass-specular), inset 0 -1px 0 0 var(--separator);
+}
+.hairline-r {
+  box-shadow: inset -1px 0 0 0 var(--separator);
+}
+.hairline-t {
+  box-shadow: inset 0 1px 0 0 var(--separator);
+}
+
+/* 细滚动条（macOS overlay 风格） */
 * {
   scrollbar-width: thin;
-  scrollbar-color: var(--border) transparent;
+  scrollbar-color: color-mix(in srgb, var(--muted-foreground) 35%, transparent) transparent;
 }
 *::-webkit-scrollbar {
   width: 8px;
@@ -130,11 +243,14 @@
   background: transparent;
 }
 *::-webkit-scrollbar-thumb {
-  background: var(--border);
+  background: color-mix(in srgb, var(--muted-foreground) 30%, transparent);
   border-radius: 4px;
+  border: 1px solid transparent;
+  background-clip: content-box;
 }
 *::-webkit-scrollbar-thumb:hover {
-  background: var(--muted-foreground);
+  background: color-mix(in srgb, var(--muted-foreground) 50%, transparent);
+  background-clip: content-box;
 }
 
 .no-scrollbar {
@@ -146,49 +262,77 @@
   display: none;
 }
 
-/* ===== 下拉 / 右键菜单（reka-ui） ===== */
+/* ===== 下拉 / 右键菜单（reka-ui）— macOS 菜单风格 ===== */
 .ui-dropdown-panel {
   z-index: 60;
   min-width: 180px;
   padding: 4px;
   border-radius: 8px;
-  border: 1px solid var(--border);
-  background-color: var(--popover);
+  border: 0.5px solid transparent;
+  background-color: var(--popover-glass);
+  backdrop-filter: saturate(var(--glass-saturate)) blur(var(--glass-popover-blur));
+  -webkit-backdrop-filter: saturate(var(--glass-saturate)) blur(var(--glass-popover-blur));
   color: var(--popover-foreground);
-  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.2);
+  box-shadow: var(--glass-float-edge), 0 8px 28px rgba(0, 0, 0, 0.16), 0 2px 6px rgba(0, 0, 0, 0.06);
+}
+.dark .ui-dropdown-panel {
+  box-shadow: 0 10px 36px rgba(0, 0, 0, 0.5), 0 2px 8px rgba(0, 0, 0, 0.25);
 }
 .ui-dropdown-item {
   display: flex;
   align-items: center;
   gap: 8px;
   width: 100%;
-  padding: 7px 8px;
+  padding: 6px 8px;
   font-size: 13px;
-  line-height: 1.2;
+  line-height: 1.25;
   border: none;
-  border-radius: 6px;
+  border-radius: 5px;
   background: transparent;
   color: inherit;
   text-align: left;
-  cursor: pointer;
+  cursor: default;
   outline: none;
   user-select: none;
+  letter-spacing: -0.01em;
 }
 .ui-dropdown-item[data-highlighted] {
-  background-color: var(--accent);
-  color: var(--accent-foreground);
+  background-color: var(--primary);
+  color: #fff;
 }
 .ui-dropdown-item[data-disabled] {
-  opacity: 0.45;
+  opacity: 0.4;
   pointer-events: none;
 }
 .ui-dropdown-item.is-danger {
   color: var(--destructive);
 }
 .ui-dropdown-item.is-danger[data-highlighted] {
-  background-color: color-mix(in oklab, var(--destructive) 16%, transparent);
-  color: var(--destructive);
+  background-color: var(--destructive);
+  color: #fff;
 }
 .ui-dropdown-item-icon {
   flex-shrink: 0;
+}
+
+/* ===== 通用控件表面 ===== */
+.ui-input-surface {
+  height: 28px;
+  padding: 0 10px;
+  border-radius: 6px;
+  border: 0.5px solid var(--input);
+  background-color: color-mix(in srgb, var(--card) 80%, transparent);
+  color: var(--foreground);
+  font-size: 13px;
+  letter-spacing: -0.01em;
+  transition: border-color 0.15s var(--ease-out), box-shadow 0.15s var(--ease-out);
+}
+.ui-input-surface:hover {
+  border-color: color-mix(in srgb, var(--input) 70%, var(--muted-foreground));
+}
+.ui-input-surface:focus,
+.ui-input-surface:focus-visible {
+  border-color: var(--ring);
+  box-shadow: 0 0 0 3.5px color-mix(in srgb, var(--ring) 28%, transparent);
+  outline: none;
 }

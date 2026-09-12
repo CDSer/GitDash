@@ -5,7 +5,7 @@
 <template>
   <div class="flex h-full flex-col">
     <!-- 搜索框 + 冲突汇总条 -->
-    <div class="border-b border-border p-3">
+    <div class="hairline-b px-4 py-3">
       <div class="flex flex-wrap items-center gap-3">
         <div class="relative max-w-[320px] flex-1">
           <Search
@@ -38,7 +38,7 @@
       <div class="min-w-[860px]">
         <!-- 表头 -->
         <div
-          class="grid items-center border-b border-border bg-card px-3 py-2 text-xs font-medium text-muted-foreground"
+          class="grid items-center hairline-b bg-background/50 px-4 py-2 text-[11px] font-medium uppercase tracking-wide text-muted-foreground"
           :style="{ gridTemplateColumns: gridTemplate }"
         >
           <div class="col-th flex justify-center">
@@ -100,7 +100,7 @@
           v-for="row in filteredProjects"
           :key="row.id"
           :data-project-row-id="row.id"
-          class="group grid items-center border-b border-border px-3 py-2 text-[13px] hover:bg-accent/60"
+          class="group grid items-center hairline-b px-4 py-2 text-[13px] transition-colors duration-150 hover:bg-accent"
           :style="{ gridTemplateColumns: gridTemplate }"
           @dblclick="openRepo(row)"
         >
@@ -187,7 +187,7 @@
     <!-- 底部批量操作栏 -->
     <div
       v-if="hasSelection"
-      class="flex h-11 shrink-0 items-center justify-between border-t border-border bg-card px-4"
+      class="material flex h-12 shrink-0 items-center justify-between hairline-t px-4"
     >
       <span class="text-[13px] text-muted-foreground">已选择 {{ selectedProjectIds.size }} 个</span>
       <div class="flex items-center gap-2">
@@ -213,7 +213,7 @@
         <Button size="sm" :disabled="operationStore.isQueueRunning" @click="batchPush">
           <Upload :size="14" /> 推送
         </Button>
-        <Button size="sm" variant="ghost" danger @click="openBatchRemove">
+        <Button size="sm" variant="ghost" class="text-destructive" @click="openBatchRemove">
           <Trash2 :size="14" /> 取消管理
         </Button>
         <Button size="sm" variant="ghost" @click="clearSelection">取消选择</Button>
@@ -483,25 +483,27 @@ onMounted(() => {
 .conflict-banner,
 .progress-banner {
   border: none;
-  cursor: pointer;
+  cursor: default;
   font-size: 12px;
   font-weight: 600;
-  padding: 4px 10px;
-  border-radius: 6px;
+  letter-spacing: -0.01em;
+  padding: 5px 11px;
+  border-radius: 8px;
   white-space: nowrap;
+  transition: background-color 0.15s var(--ease-out);
 }
 .conflict-banner {
-  background: color-mix(in oklab, #dc2626 16%, transparent);
-  color: #dc2626;
+  background: color-mix(in srgb, var(--sys-red) 12%, transparent);
+  color: var(--sys-red);
 }
 .conflict-banner:hover {
-  background: color-mix(in oklab, #dc2626 26%, transparent);
+  background: color-mix(in srgb, var(--sys-red) 18%, transparent);
 }
 .progress-banner {
-  background: color-mix(in oklab, #d97706 16%, transparent);
-  color: #b45309;
+  background: color-mix(in srgb, var(--sys-orange) 12%, transparent);
+  color: var(--sys-orange);
 }
 .progress-banner:hover {
-  background: color-mix(in oklab, #d97706 26%, transparent);
+  background: color-mix(in srgb, var(--sys-orange) 18%, transparent);
 }
 </style>

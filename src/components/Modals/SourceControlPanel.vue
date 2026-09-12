@@ -695,8 +695,8 @@ async function onCheckout(e: Event) {
   justify-content: space-between;
   gap: 12px;
   padding: 10px 12px;
-  background: color-mix(in oklab, oklch(0.75 0.16 85) 12%, transparent);
-  border-bottom: 1px solid var(--border);
+  background: color-mix(in srgb, var(--sys-orange) 12%, transparent);
+  box-shadow: inset 0 -1px 0 0 var(--separator);
   flex-shrink: 0;
 }
 .sc-banner-text {
@@ -713,7 +713,7 @@ async function onCheckout(e: Event) {
   color: var(--destructive);
 }
 .sc-banner-ok {
-  color: oklch(0.6 0.14 150);
+  color: var(--sys-green);
 }
 .sc-banner-actions {
   display: flex;

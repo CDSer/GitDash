@@ -218,19 +218,21 @@ function toggle() {
   gap: 4px;
   height: 26px;
   padding-right: 8px;
-  cursor: pointer;
-  font-size: 13px;
+  cursor: default;
+  font-size: 12px;
+  letter-spacing: -0.01em;
   color: var(--foreground);
-  border-radius: 4px;
+  border-radius: 6px;
+  transition: background-color 0.12s var(--ease-out);
 }
 .tree-row:hover {
   background-color: var(--accent);
-  color: var(--accent-foreground);
+  color: var(--foreground);
 }
 .tree-caret {
   flex-shrink: 0;
   color: var(--muted-foreground);
-  transition: transform 0.12s;
+  transition: transform 0.18s var(--ease-out);
 }
 .tree-caret.is-open {
   transform: rotate(90deg);

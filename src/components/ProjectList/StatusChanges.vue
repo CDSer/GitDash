@@ -42,17 +42,19 @@ const emit = defineEmits<{
 <style scoped>
 .status-conflict-btn {
   border: none;
-  cursor: pointer;
+  cursor: default;
   height: 18px;
   padding: 0 7px;
   font-size: 11px;
   line-height: 1;
-  border-radius: 4px;
+  border-radius: 5px;
   font-weight: 600;
-  background-color: color-mix(in oklab, #dc2626 18%, transparent);
-  color: #dc2626;
+  letter-spacing: -0.01em;
+  background-color: color-mix(in srgb, var(--sys-red) 12%, transparent);
+  color: var(--sys-red);
+  transition: background-color 0.15s var(--ease-out);
 }
 .status-conflict-btn:hover {
-  background-color: color-mix(in oklab, #dc2626 28%, transparent);
+  background-color: color-mix(in srgb, var(--sys-red) 18%, transparent);
 }
 </style>

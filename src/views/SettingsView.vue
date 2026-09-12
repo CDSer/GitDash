@@ -6,10 +6,6 @@
 <template>
   <div class="settings-page">
     <header class="settings-header">
-      <div class="settings-header-left">
-        <SettingsIcon :size="15" class="shrink-0 text-muted-foreground" />
-        <span class="settings-title">设置</span>
-      </div>
 
       <div class="tab-modes" role="tablist" aria-label="设置分类">
         <button
@@ -87,16 +83,16 @@
         <template v-else-if="activeTab === 'appearance'">
           <div class="form-item">
             <label class="form-label">主题</label>
-            <div class="inline-flex rounded-md border border-border p-0.5">
+            <div class="inline-flex rounded-lg border-[0.5px] border-border bg-muted/60 p-0.5">
               <button
                 v-for="option in themeOptions"
                 :key="option"
                 type="button"
                 :class="[
-                  'rounded px-3 py-1 text-[13px] transition-colors',
+                  'rounded-[6px] px-3 py-1 text-[12px] font-medium transition-all duration-150',
                   settings.theme === option
-                    ? 'bg-primary text-primary-foreground'
-                    : 'text-muted-foreground hover:bg-accent',
+                    ? 'bg-card text-foreground shadow-[0_0.5px_1.5px_rgba(0,0,0,0.08)]'
+                    : 'text-muted-foreground hover:text-foreground',
                 ]"
                 @click="settings.theme = option"
               >
@@ -253,11 +249,13 @@ async function saveSettings() {
   display: flex;
   align-items: center;
   gap: 12px;
-  height: 44px;
+  height: 48px;
   flex-shrink: 0;
-  padding: 0 12px;
-  border-bottom: 1px solid var(--border);
-  background-color: var(--card);
+  padding: 0 16px;
+  box-shadow: var(--glass-specular), inset 0 -1px 0 0 var(--separator);
+  background-color: var(--toolbar-bg);
+  backdrop-filter: saturate(var(--glass-saturate)) blur(var(--glass-blur));
+  -webkit-backdrop-filter: saturate(var(--glass-saturate)) blur(var(--glass-blur));
 }
 .settings-header-left {
   display: flex;
@@ -268,6 +266,7 @@ async function saveSettings() {
 .settings-title {
   font-size: 13px;
   font-weight: 600;
+  letter-spacing: -0.015em;
 }
 .settings-header-right {
   margin-left: auto;
@@ -296,15 +295,16 @@ async function saveSettings() {
   font-size: 12px;
   font-weight: 500;
   color: var(--muted-foreground);
-  transition: background-color 0.12s ease, color 0.12s ease;
+  cursor: default;
+  transition: background-color 0.15s var(--ease-out), color 0.15s var(--ease-out);
 }
 .mode-btn:hover {
   color: var(--foreground);
 }
 .mode-btn--active {
-  background-color: var(--background);
+  background-color: var(--card);
   color: var(--foreground);
-  box-shadow: 0 1px 2px color-mix(in oklab, var(--foreground) 8%, transparent);
+  box-shadow: 0 0.5px 1.5px rgba(0, 0, 0, 0.08), 0 1px 2px rgba(0, 0, 0, 0.04);
 }
 
 .settings-body {
@@ -340,8 +340,8 @@ async function saveSettings() {
   min-height: 120px;
   padding: 8px 10px;
   border-radius: 6px;
-  border: 1px solid var(--input);
-  background-color: var(--background);
+  border: 0.5px solid var(--input);
+  background-color: var(--card);
   color: var(--foreground);
   font-size: 13px;
   line-height: 1.5;
@@ -351,7 +351,7 @@ async function saveSettings() {
 .blacklist-textarea:focus-visible {
   outline: none;
   border-color: var(--ring);
-  box-shadow: 0 0 0 2px color-mix(in oklab, var(--ring) 30%, transparent);
+  box-shadow: 0 0 0 3.5px color-mix(in srgb, var(--ring) 28%, transparent);
 }
 .skin-grid {
   display: grid;
@@ -364,18 +364,18 @@ async function saveSettings() {
   align-items: center;
   gap: 6px;
   padding: 10px 6px 8px;
-  border-radius: 8px;
-  border: 1.5px solid var(--border);
+  border-radius: 10px;
+  border: 1px solid var(--border);
   background: var(--card);
-  cursor: pointer;
-  transition: border-color 0.15s, box-shadow 0.15s;
+  cursor: default;
+  transition: border-color 0.15s var(--ease-out), box-shadow 0.15s var(--ease-out);
 }
 .skin-card:hover {
-  border-color: var(--muted-foreground);
+  border-color: color-mix(in srgb, var(--muted-foreground) 40%, transparent);
 }
 .skin-card--active {
   border-color: var(--primary);
-  box-shadow: 0 0 0 2px color-mix(in oklab, var(--primary) 30%, transparent);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--primary) 22%, transparent);
 }
 .skin-swatches {
   display: flex;

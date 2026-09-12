@@ -7,7 +7,7 @@
   <div class="flex h-full flex-col overflow-hidden">
     <header
       v-if="!embedded"
-      class="flex h-12 shrink-0 items-center justify-between border-b border-border bg-card px-4"
+      class="surface-toolbar flex h-12 shrink-0 items-center justify-between hairline-b px-4"
     >
       <div class="flex min-w-0 items-center gap-2">
         <Button variant="ghost" size="sm" @click="goBack">
@@ -606,12 +606,13 @@ function statusVariant(status: string): 'success' | 'danger' | 'warning' | 'info
   flex-direction: column;
   width: var(--history-branch-width, 200px);
   flex-shrink: 0;
-  background-color: var(--muted);
-  border-right: 1px solid var(--border);
+  background-color: var(--sidebar-bg);
+  backdrop-filter: saturate(var(--glass-saturate)) blur(var(--glass-blur));
+  -webkit-backdrop-filter: saturate(var(--glass-saturate)) blur(var(--glass-blur));
+  box-shadow: var(--glass-specular), inset -1px 0 0 0 var(--separator);
 }
 .detail-aside {
-  border-right: none;
-  border-left: 1px solid var(--border);
+  box-shadow: inset 1px 0 0 0 var(--separator);
   width: var(--history-detail-width, 260px);
 }
 .detail-close {
@@ -641,10 +642,13 @@ function statusVariant(status: string): 'success' | 'danger' | 'warning' | 'info
   display: flex;
   align-items: center;
   gap: 6px;
-  padding: 6px 8px 6px 12px;
-  font-size: 13px;
+  padding: 8px 8px 8px 12px;
+  font-size: 11px;
   font-weight: 600;
-  border-bottom: 1px solid var(--border);
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+  color: var(--muted-foreground);
+  box-shadow: inset 0 -1px 0 0 var(--separator);
   flex-shrink: 0;
 }
 .branch-list {
@@ -663,13 +667,14 @@ function statusVariant(status: string): 'success' | 'danger' | 'warning' | 'info
   gap: 6px;
   width: 100%;
   padding: 6px 8px;
-  font-size: 13px;
+  font-size: 12px;
   border: none;
   border-radius: 6px;
   background: transparent;
   color: var(--foreground);
   text-align: left;
-  cursor: pointer;
+  cursor: default;
+  transition: background-color 0.15s var(--ease-out);
 }
 .branch-item:hover {
   background-color: var(--accent);
