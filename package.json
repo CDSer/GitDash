@@ -1,6 +1,6 @@
 {
   "name": "gitdash",
-  "version": "1.0.2",
+  "version": "1.0.3",
   "description": "Lightweight Git dashboard in system tray",
   "type": "module",
   "scripts": {

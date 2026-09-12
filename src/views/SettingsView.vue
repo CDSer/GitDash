@@ -147,7 +147,7 @@
 
 <script setup lang="ts">
 import { computed, ref } from 'vue';
-import { FolderSearch, Palette, Settings as SettingsIcon, SlidersHorizontal } from 'lucide-vue-next';
+import { FolderSearch, Palette, SlidersHorizontal } from 'lucide-vue-next';
 import { useAppStore } from '../stores/appStore';
 import { open } from '@tauri-apps/plugin-dialog';
 import { toast } from '../lib/toast';

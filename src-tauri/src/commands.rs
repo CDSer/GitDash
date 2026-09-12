@@ -2,10 +2,11 @@
 // 定义所有暴露给前端的 Rust 命令
 
 use crate::models::{
-    AppConfig, BatchImportResult, Branch, Commit, CommitDetail, CommitFile, ConflictFileContent,
-    ConflictSide, DiscardEntry, FileNode, GitCommitResult, GitDiffContentResult, Group,
-    InProgressOp, MergeResult, OperationEvent, Project, ProjectGitResult, ProjectStatus,
-    ScanOptions, ScannedRepo, Settings, UserSkinPack, UserSkinPreview, UserSkinTokens,
+    AppConfig, BatchImportResult, Branch, BranchCompareResult, Commit, CommitDetail, CommitFile,
+    ConflictFileContent, ConflictSide, DiscardEntry, FileNode, GitCommitResult,
+    GitDiffContentResult, Group, InProgressOp, MergeResult, OperationEvent, Project,
+    ProjectGitResult, ProjectStatus, ScanOptions, ScannedRepo, Settings, StashEntry, TagInfo,
+    UserSkinPack, UserSkinPreview, UserSkinTokens,
 };
 use crate::git::GitExecutor;
 use crate::scanner::ProjectScanner;
@@ -836,6 +837,7 @@ async fn collect_git_results(
 #[tauri::command]
 pub async fn batch_pull(
     project_ids: Vec<String>,
+    rebase: Option<bool>,
     state: State<'_, AppState>,
     window: WebviewWindow,
 ) -> Result<Vec<ProjectGitResult>, String> {
@@ -863,8 +865,16 @@ pub async fn batch_pull(
             };
 
             emit("running", format!("[{}] 准备拉取…", project.name));
-            emit("running", format!("[{}] 执行 git pull --no-edit", project.name));
-            let result = git.exec(&project.path, &["pull", "--no-edit"]).await;
+            let pull_args: Vec<&str> = if rebase.unwrap_or(false) {
+                vec!["pull", "--rebase", "--no-edit"]
+            } else {
+                vec!["pull", "--no-edit"]
+            };
+            emit(
+                "running",
+                format!("[{}] 执行 git {}", project.name, pull_args.join(" ")),
+            );
+            let result = git.exec(&project.path, &pull_args).await;
             cache.invalidate(&project.id);
             emit(
                 "running",
@@ -977,6 +987,8 @@ pub async fn batch_fetch(
 #[tauri::command]
 pub async fn batch_push(
     project_ids: Vec<String>,
+    force_with_lease: Option<bool>,
+    tags: Option<bool>,
     state: State<'_, AppState>,
     window: WebviewWindow,
 ) -> Result<Vec<ProjectGitResult>, String> {
@@ -1024,11 +1036,18 @@ pub async fn batch_push(
                 };
             }
 
+            let mut push_args: Vec<&str> = vec!["push"];
+            if force_with_lease.unwrap_or(false) {
+                push_args.push("--force-with-lease");
+            }
+            if tags.unwrap_or(false) {
+                push_args.push("--tags");
+            }
             emit(
                 "running",
-                format!("[{}] 上游就绪，执行 git push", project.name),
+                format!("[{}] 上游就绪，执行 git {}", project.name, push_args.join(" ")),
             );
-            let result = git.exec(&project.path, &["push"]).await;
+            let result = git.exec(&project.path, &push_args).await;
             cache.invalidate(&project.id);
             emit(
                 "running",
@@ -1329,10 +1348,12 @@ pub async fn git_discard(
 
 /// 提交（返回新提交 sha + 摘要）
 /// 存在未解决冲突时拒绝；进行中的 merge 在全部 resolved 后可用 message 或默认信息完成合并提交
+/// amend=true 时修改最近一次提交（可选修改 message）
 #[tauri::command]
 pub async fn git_commit(
     project_id: String,
     message: String,
+    amend: Option<bool>,
     state: State<'_, AppState>,
 ) -> Result<GitCommitResult, String> {
     let project = resolve_project(&state, &project_id)?;
@@ -1351,13 +1372,24 @@ pub async fn git_commit(
 
     // merge 进行中且未提供信息时，用 git 自带的 MERGE_MSG 完成提交
     let is_merge_finish = matches!(in_progress.as_ref().map(|p| p.kind.as_str()), Some("merge"));
+    let is_amend = amend.unwrap_or(false);
     if trimmed.is_empty() {
-        if !is_merge_finish {
+        if !is_merge_finish && !is_amend {
             return Err("提交信息不能为空".to_string());
         }
     }
 
-    let result = if is_merge_finish && trimmed.is_empty() {
+    let result = if is_amend {
+        if trimmed.is_empty() {
+            state
+                .git
+                .exec(&project.path, &["commit", "--amend", "--no-edit"])
+                .await
+        } else {
+            let args = ["commit", "--amend", "-m", trimmed];
+            state.git.exec(&project.path, &args).await
+        }
+    } else if is_merge_finish && trimmed.is_empty() {
         state
             .git
             .exec(&project.path, &["commit", "--no-edit"])
@@ -2034,6 +2066,764 @@ pub async fn git_remote_url(
     } else {
         Ok(None)
     }
+}
+
+// ============ 分支 / Stash / Tag / 历史操作 / 对比 / 搜索 ============
+
+/// 校验分支名是否合法（防止参数注入与非法 ref）
+fn is_valid_branch_name(name: &str) -> bool {
+    if name.is_empty() || name.len() > 255 {
+        return false;
+    }
+    if name.starts_with('-')
+        || name.starts_with('/')
+        || name.ends_with('/')
+        || name.contains("..")
+        || name.contains(' ')
+        || name.contains('~')
+        || name.contains('^')
+        || name.contains(':')
+        || name.contains('?')
+        || name.contains('*')
+        || name.contains('[')
+        || name.contains("//")
+        || name.contains("@{")
+        || name.ends_with(".lock")
+        || name.ends_with('.')
+        || name.contains('\\')
+    {
+        return false;
+    }
+    !name.contains("//") && !name.chars().any(|c| c.is_control())
+}
+
+/// 校验 tag 名
+fn is_valid_tag_name(name: &str) -> bool {
+    is_valid_branch_name(name) && !name.starts_with('-')
+}
+
+/// 从 upstream 引用推断远程名（origin/feature → origin）
+fn remote_name_from_upstream(upstream: &str) -> Option<String> {
+    let first = upstream.split('/').next()?;
+    if first.is_empty() {
+        None
+    } else {
+        Some(first.to_string())
+    }
+}
+
+/// 创建本地分支（可选立即 checkout；可选 track 指定远程分支）
+#[tauri::command]
+pub async fn git_create_branch(
+    project_id: String,
+    name: String,
+    checkout: Option<bool>,
+    start_point: Option<String>,
+    track: Option<bool>,
+    state: State<'_, AppState>,
+) -> Result<(), String> {
+    let project = resolve_project(&state, &project_id)?;
+    let name = name.trim().to_string();
+    if !is_valid_branch_name(&name) {
+        return Err("非法的分支名".to_string());
+    }
+    let start = start_point
+        .as_deref()
+        .map(|s| s.trim())
+        .filter(|s| !s.is_empty());
+    if let Some(sp) = start {
+        if sp.starts_with('-') || sp.contains(' ') {
+            return Err("非法的起点引用".to_string());
+        }
+    }
+
+    let do_checkout = checkout.unwrap_or(true);
+    let do_track = track.unwrap_or(false);
+
+    // 检查是否已存在同名本地分支
+    if do_checkout {
+        let exists = state
+            .git
+            .exec(&project.path, &["rev-parse", "--verify", "--quiet", &format!("refs/heads/{}", name)])
+            .await;
+        if exists.success && !exists.stdout.trim().is_empty() {
+            return Err(format!("本地分支已存在：{}", name));
+        }
+    }
+
+    let result = if do_checkout {
+        if do_track {
+            let sp = start.ok_or("跟踪远程分支时必须指定远程，如 origin/feature")?;
+            // git checkout -b name --track origin/xxx
+            let args = ["checkout", "-b", &name, "--track", sp];
+            state.git.exec(&project.path, &args).await
+        } else {
+            let mut args: Vec<String> = vec!["checkout".into(), "-b".into(), name.clone()];
+            if let Some(sp) = start {
+                args.push(sp.to_string());
+            }
+            let refs: Vec<&str> = args.iter().map(|s| s.as_str()).collect();
+            state.git.exec(&project.path, &refs).await
+        }
+    } else {
+        let mut args: Vec<String> = vec!["branch".into(), name.clone()];
+        if let Some(sp) = start {
+            args.push(sp.to_string());
+        }
+        let refs: Vec<&str> = args.iter().map(|s| s.as_str()).collect();
+        state.git.exec(&project.path, &refs).await
+    };
+
+    if !result.success {
+        return Err(format!("创建分支失败：{}", result.stderr));
+    }
+    if do_checkout {
+        state.cache.invalidate(&project_id);
+    }
+    Ok(())
+}
+
+/// 删除分支（本地或远程）
+#[tauri::command]
+pub async fn git_delete_branch(
+    project_id: String,
+    name: String,
+    force: Option<bool>,
+    delete_remote: Option<bool>,
+    state: State<'_, AppState>,
+) -> Result<(), String> {
+    let project = resolve_project(&state, &project_id)?;
+    let name = name.trim().to_string();
+    if !is_valid_branch_name(&name) {
+        return Err("非法的分支名".to_string());
+    }
+    if delete_remote.unwrap_or(false) {
+        let remote = remote_name_from_upstream(&name).unwrap_or_else(|| "origin".into());
+        let local_name = name.split_once('/').map(|(_, r)| r).unwrap_or(&name);
+        if !is_valid_branch_name(local_name) {
+            return Err("非法的远程分支名".to_string());
+        }
+        let args = ["push", &remote, "--delete", local_name];
+        let result = state.git.exec(&project.path, &args).await;
+        if !result.success {
+            return Err(format!("删除远程分支失败：{}", result.stderr));
+        }
+    } else {
+        let flag = if force.unwrap_or(false) { "-D" } else { "-d" };
+        let args = ["branch", flag, &name];
+        let result = state.git.exec(&project.path, &args).await;
+        if !result.success {
+            return Err(format!("删除分支失败：{}", result.stderr));
+        }
+    }
+    Ok(())
+}
+
+/// 为分支设置上游（upstream 形如 origin/main）
+#[tauri::command]
+pub async fn git_set_upstream(
+    project_id: String,
+    branch: Option<String>,
+    upstream: String,
+    state: State<'_, AppState>,
+) -> Result<(), String> {
+    let project = resolve_project(&state, &project_id)?;
+    let upstream = upstream.trim().to_string();
+    if upstream.is_empty() || upstream.starts_with('-') || upstream.contains(' ') {
+        return Err("非法的上游分支名".to_string());
+    }
+    let branch = branch
+        .map(|b| b.trim().to_string())
+        .filter(|b| !b.is_empty());
+    if let Some(b) = &branch {
+        if !is_valid_branch_name(b) {
+            return Err("非法的分支名".to_string());
+        }
+    }
+    let args: Vec<String> = match &branch {
+        Some(b) => vec!["branch".into(), "-u".into(), upstream, b.clone()],
+        None => vec!["branch".into(), "-u".into(), upstream],
+    };
+    let refs: Vec<&str> = args.iter().map(|s| s.as_str()).collect();
+    let result = state.git.exec(&project.path, &refs).await;
+    if !result.success {
+        return Err(format!("设置上游失败：{}", result.stderr));
+    }
+    state.cache.invalidate(&project_id);
+    Ok(())
+}
+
+/// Cherry-pick 指定提交
+#[tauri::command]
+pub async fn git_cherry_pick(
+    project_id: String,
+    sha: String,
+    state: State<'_, AppState>,
+) -> Result<(), String> {
+    let project = resolve_project(&state, &project_id)?;
+    if !is_safe_sha(&sha) {
+        return Err("非法的提交哈希".to_string());
+    }
+    if crate::git::GitExecutor::detect_in_progress_op(&project.path).is_some() {
+        return Err("已有进行中的合并/变基/Cherry-pick 操作".to_string());
+    }
+    let args = ["cherry-pick", &sha];
+    let result = state.git.exec(&project.path, &args).await;
+    // 冲突时仍算成功进入状态机，由前端继续解决
+    let has_conflicts = {
+        let ls = state.git.exec(&project.path, &["ls-files", "-u"]).await;
+        ls.success && !ls.stdout.trim().is_empty()
+    };
+    if !result.success && !has_conflicts {
+        return Err(format!("Cherry-pick 失败：{}", result.stderr));
+    }
+    state.cache.invalidate(&project_id);
+    Ok(())
+}
+
+/// Revert 指定提交
+#[tauri::command]
+pub async fn git_revert_commit(
+    project_id: String,
+    sha: String,
+    state: State<'_, AppState>,
+) -> Result<(), String> {
+    let project = resolve_project(&state, &project_id)?;
+    if !is_safe_sha(&sha) {
+        return Err("非法的提交哈希".to_string());
+    }
+    if crate::git::GitExecutor::detect_in_progress_op(&project.path).is_some() {
+        return Err("已有进行中的合并/变基/Cherry-pick 操作".to_string());
+    }
+    let args = ["revert", "--no-edit", &sha];
+    let result = state.git.exec(&project.path, &args).await;
+    let has_conflicts = {
+        let ls = state.git.exec(&project.path, &["ls-files", "-u"]).await;
+        ls.success && !ls.stdout.trim().is_empty()
+    };
+    if !result.success && !has_conflicts {
+        return Err(format!("Revert 失败：{}", result.stderr));
+    }
+    state.cache.invalidate(&project_id);
+    Ok(())
+}
+
+/// Reset 到指定目标（mode: soft | mixed | hard）
+#[tauri::command]
+pub async fn git_reset(
+    project_id: String,
+    target: String,
+    mode: String,
+    state: State<'_, AppState>,
+) -> Result<(), String> {
+    let project = resolve_project(&state, &project_id)?;
+    let target = target.trim().to_string();
+    if target.is_empty()
+        || target.starts_with('-')
+        || target.contains(' ')
+        || !(target == "HEAD" || is_safe_sha(&target) || is_valid_branch_name(&target))
+    {
+        return Err("非法的 reset 目标".to_string());
+    }
+    let mode = mode.trim().to_ascii_lowercase();
+    if !matches!(mode.as_str(), "soft" | "mixed" | "hard") {
+        return Err("reset 模式必须是 soft / mixed / hard".to_string());
+    }
+    let flag = format!("--{}", mode);
+    let args = ["reset", &flag, &target];
+    let result = state.git.exec(&project.path, &args).await;
+    if !result.success {
+        return Err(format!("Reset 失败：{}", result.stderr));
+    }
+    state.cache.invalidate(&project_id);
+    Ok(())
+}
+
+/// 发起 rebase（将当前分支变基到 onto）
+#[tauri::command]
+pub async fn git_rebase(
+    project_id: String,
+    onto: String,
+    state: State<'_, AppState>,
+) -> Result<(), String> {
+    let project = resolve_project(&state, &project_id)?;
+    let onto = onto.trim().to_string();
+    if onto.is_empty()
+        || onto.starts_with('-')
+        || onto.contains(' ')
+        || !(onto == "HEAD" || is_safe_sha(&onto) || is_valid_branch_name(&onto))
+    {
+        return Err("非法的 rebase 目标".to_string());
+    }
+    if crate::git::GitExecutor::detect_in_progress_op(&project.path).is_some() {
+        return Err("已有进行中的合并/变基操作".to_string());
+    }
+    let status = state.git.status(&project.path).await;
+    if status.modified > 0 || status.untracked > 0 {
+        return Err("工作区有未提交的改动，请先提交或暂存后再变基".to_string());
+    }
+    let args = ["rebase", &onto];
+    let result = state.git.exec(&project.path, &args).await;
+    let has_conflicts = {
+        let ls = state.git.exec(&project.path, &["ls-files", "-u"]).await;
+        ls.success && !ls.stdout.trim().is_empty()
+    };
+    if !result.success && !has_conflicts {
+        return Err(format!("变基失败：{}", result.stderr));
+    }
+    state.cache.invalidate(&project_id);
+    Ok(())
+}
+
+/// 列出 Stash
+#[tauri::command]
+pub async fn git_stash_list(
+    project_id: String,
+    state: State<'_, AppState>,
+) -> Result<Vec<StashEntry>, String> {
+    let project = resolve_project(&state, &project_id)?;
+    let result = state
+        .git
+        .exec(&project.path, &["stash", "list", "--pretty=format:%gd%x09%H%x09%s"])
+        .await;
+    if !result.success {
+        return Err(format!("获取 Stash 失败：{}", result.stderr));
+    }
+    let mut items = Vec::new();
+    for line in result.stdout.lines() {
+        if line.trim().is_empty() {
+            continue;
+        }
+        let parts: Vec<&str> = line.splitn(3, '\t').collect();
+        if parts.len() < 3 {
+            continue;
+        }
+        let index = parts[0]
+            .trim_start_matches("stash@{")
+            .trim_end_matches('}')
+            .parse::<u32>()
+            .unwrap_or(0);
+        items.push(StashEntry {
+            index,
+            sha: parts[1].to_string(),
+            message: parts[2].to_string(),
+            branch: None,
+        });
+    }
+    Ok(items)
+}
+
+/// 新建 Stash
+#[tauri::command]
+pub async fn git_stash_push(
+    project_id: String,
+    message: Option<String>,
+    include_untracked: Option<bool>,
+    state: State<'_, AppState>,
+) -> Result<(), String> {
+    let project = resolve_project(&state, &project_id)?;
+    let mut args: Vec<String> = vec!["stash".into(), "push".into()];
+    if include_untracked.unwrap_or(true) {
+        args.push("-u".into());
+    }
+    let msg = message
+        .map(|m| m.trim().to_string())
+        .filter(|m| !m.is_empty());
+    if let Some(m) = &msg {
+        args.push("-m".into());
+        args.push(m.clone());
+    }
+    let refs: Vec<&str> = args.iter().map(|s| s.as_str()).collect();
+    let result = state.git.exec(&project.path, &refs).await;
+    if !result.success {
+        return Err(format!("创建 Stash 失败：{}", result.stderr));
+    }
+    // 空 stash 时 git 会失败并提示
+    if result.stdout.contains("No local changes") || result.stderr.contains("No local changes") {
+        return Err("没有可保存的本地改动".to_string());
+    }
+    state.cache.invalidate(&project_id);
+    Ok(())
+}
+
+/// 应用 Stash（不删除）
+#[tauri::command]
+pub async fn git_stash_apply(
+    project_id: String,
+    index: u32,
+    state: State<'_, AppState>,
+) -> Result<(), String> {
+    let project = resolve_project(&state, &project_id)?;
+    let refname = format!("stash@{{{}}}", index);
+    let result = state
+        .git
+        .exec(&project.path, &["stash", "apply", &refname])
+        .await;
+    if !result.success {
+        return Err(format!("应用 Stash 失败：{}", result.stderr));
+    }
+    state.cache.invalidate(&project_id);
+    Ok(())
+}
+
+/// 弹出 Stash（应用并删除）
+#[tauri::command]
+pub async fn git_stash_pop(
+    project_id: String,
+    index: Option<u32>,
+    state: State<'_, AppState>,
+) -> Result<(), String> {
+    let project = resolve_project(&state, &project_id)?;
+    let refname = match index {
+        Some(i) => format!("stash@{{{}}}", i),
+        None => "stash@{0}".to_string(),
+    };
+    let result = state
+        .git
+        .exec(&project.path, &["stash", "pop", &refname])
+        .await;
+    if !result.success {
+        return Err(format!("弹出 Stash 失败：{}", result.stderr));
+    }
+    state.cache.invalidate(&project_id);
+    Ok(())
+}
+
+/// 丢弃 Stash
+#[tauri::command]
+pub async fn git_stash_drop(
+    project_id: String,
+    index: u32,
+    state: State<'_, AppState>,
+) -> Result<(), String> {
+    let project = resolve_project(&state, &project_id)?;
+    let refname = format!("stash@{{{}}}", index);
+    let result = state
+        .git
+        .exec(&project.path, &["stash", "drop", &refname])
+        .await;
+    if !result.success {
+        return Err(format!("丢弃 Stash 失败：{}", result.stderr));
+    }
+    Ok(())
+}
+
+/// 列出 Tag
+#[tauri::command]
+pub async fn git_list_tags(
+    project_id: String,
+    state: State<'_, AppState>,
+) -> Result<Vec<TagInfo>, String> {
+    let project = resolve_project(&state, &project_id)?;
+    let result = state
+        .git
+        .exec(
+            &project.path,
+            &["tag", "-l", "--sort=-creatordate", "--format=%(refname:short)%09%(objectname)%09%(contents:subject)"],
+        )
+        .await;
+    if !result.success {
+        return Err(format!("获取 Tag 失败：{}", result.stderr));
+    }
+    let mut tags = Vec::new();
+    for line in result.stdout.lines() {
+        if line.trim().is_empty() {
+            continue;
+        }
+        let parts: Vec<&str> = line.splitn(3, '\t').collect();
+        tags.push(TagInfo {
+            name: parts.first().copied().unwrap_or("").to_string(),
+            sha: parts.get(1).copied().unwrap_or("").to_string(),
+            message: parts.get(2).map(|s| s.to_string()).filter(|s| !s.is_empty()),
+        });
+    }
+    Ok(tags)
+}
+
+/// 创建 Tag（可选带注释 message，可选指定 commit）
+#[tauri::command]
+pub async fn git_create_tag(
+    project_id: String,
+    name: String,
+    message: Option<String>,
+    commit: Option<String>,
+    state: State<'_, AppState>,
+) -> Result<(), String> {
+    let project = resolve_project(&state, &project_id)?;
+    let name = name.trim().to_string();
+    if !is_valid_tag_name(&name) {
+        return Err("非法的 Tag 名".to_string());
+    }
+    if let Some(c) = &commit {
+        if !is_safe_sha(c) {
+            return Err("非法的提交哈希".to_string());
+        }
+    }
+    let msg = message
+        .map(|m| m.trim().to_string())
+        .filter(|m| !m.is_empty());
+    let mut args: Vec<String> = vec!["tag".into(), name.clone()];
+    if let Some(m) = &msg {
+        args.push("-a".into());
+        args.push("-m".into());
+        args.push(m.clone());
+    }
+    if let Some(c) = &commit {
+        args.push(c.clone());
+    }
+    let refs: Vec<&str> = args.iter().map(|s| s.as_str()).collect();
+    let result = state.git.exec(&project.path, &refs).await;
+    if !result.success {
+        return Err(format!("创建 Tag 失败：{}", result.stderr));
+    }
+    Ok(())
+}
+
+/// 删除 Tag
+#[tauri::command]
+pub async fn git_delete_tag(
+    project_id: String,
+    name: String,
+    delete_remote: Option<bool>,
+    state: State<'_, AppState>,
+) -> Result<(), String> {
+    let project = resolve_project(&state, &project_id)?;
+    let name = name.trim().to_string();
+    if !is_valid_tag_name(&name) {
+        return Err("非法的 Tag 名".to_string());
+    }
+    if delete_remote.unwrap_or(false) {
+        let tag_ref = format!(":refs/tags/{}", name);
+        let args = ["push", "origin", &tag_ref];
+        let result = state.git.exec(&project.path, &args).await;
+        if !result.success {
+            return Err(format!("删除远程 Tag 失败：{}", result.stderr));
+        }
+    } else {
+        let args = ["tag", "-d", &name];
+        let result = state.git.exec(&project.path, &args).await;
+        if !result.success {
+            return Err(format!("删除 Tag 失败：{}", result.stderr));
+        }
+    }
+    Ok(())
+}
+
+/// 推送 Tag（可指定单个 tag）
+#[tauri::command]
+pub async fn git_push_tags(
+    project_id: String,
+    name: Option<String>,
+    state: State<'_, AppState>,
+) -> Result<(), String> {
+    let project = resolve_project(&state, &project_id)?;
+    let mut args: Vec<String> = vec!["push".into(), "origin".into()];
+    let name = name
+        .map(|n| n.trim().to_string())
+        .filter(|n| !n.is_empty());
+    if let Some(n) = &name {
+        if !is_valid_tag_name(n) {
+            return Err("非法的 Tag 名".to_string());
+        }
+        args.push(n.clone());
+    } else {
+        args.push("--tags".into());
+    }
+    let refs: Vec<&str> = args.iter().map(|s| s.as_str()).collect();
+    let result = state.git.exec(&project.path, &refs).await;
+    if !result.success {
+        return Err(format!("推送 Tag 失败：{}", result.stderr));
+    }
+    Ok(())
+}
+
+/// 搜索提交（按 message / author，大小写不敏感）
+#[tauri::command]
+pub async fn git_search_commits(
+    project_id: String,
+    query: String,
+    branch: Option<String>,
+    limit: Option<u32>,
+    state: State<'_, AppState>,
+) -> Result<Vec<Commit>, String> {
+    let project = resolve_project(&state, &project_id)?;
+    let query = query.trim().to_string();
+    if query.is_empty() {
+        return Ok(Vec::new());
+    }
+    if query.chars().any(|c| c.is_control()) {
+        return Err("非法的搜索词".to_string());
+    }
+    let limit_n = limit.unwrap_or(50).clamp(1, 200);
+    let mut args: Vec<String> = vec![
+        "log".into(),
+        "--all".into(),
+        "-i".into(),
+        format!("--grep={}", query),
+        format!("-n{}", limit_n),
+        "--pretty=format:%H%x09%h%x09%s%x09%an%x09%ae%x09%at%x09%P".into(),
+    ];
+    if let Some(b) = branch.as_ref().map(|s| s.trim()).filter(|s| !s.is_empty()) {
+        if b.starts_with('-') || b.contains(' ') {
+            return Err("非法的分支名".to_string());
+        }
+        args.push(b.to_string());
+    }
+    let refs: Vec<&str> = args.iter().map(|s| s.as_str()).collect();
+    let result = state.git.exec(&project.path, &refs).await;
+    if !result.success {
+        return Err(format!("搜索提交失败：{}", result.stderr));
+    }
+    let mut commits = Vec::new();
+    for line in result.stdout.lines() {
+        if line.trim().is_empty() {
+            continue;
+        }
+        let parts: Vec<&str> = line.splitn(7, '\t').collect();
+        if parts.len() < 6 {
+            continue;
+        }
+        commits.push(Commit {
+            id: parts[0].to_string(),
+            short_id: parts[1].to_string(),
+            message: parts[2].to_string(),
+            author: parts[3].to_string(),
+            email: parts[4].to_string(),
+            date: parts[5].parse().unwrap_or(0),
+            parents: parts
+                .get(6)
+                .map(|s| s.split_whitespace().map(|x| x.to_string()).collect())
+                .unwrap_or_default(),
+            is_pushed: true,
+        });
+    }
+    Ok(commits)
+}
+
+/// 两分支对比：base 与 head 的提交与文件差异
+#[tauri::command]
+pub async fn git_diff_branches(
+    project_id: String,
+    base: String,
+    head: String,
+    state: State<'_, AppState>,
+) -> Result<BranchCompareResult, String> {
+    let project = resolve_project(&state, &project_id)?;
+    let base = base.trim().to_string();
+    let head = head.trim().to_string();
+    if base.is_empty() || head.is_empty() || base.starts_with('-') || head.starts_with('-') || base.contains(' ') || head.contains(' ') {
+        return Err("非法的分支名".to_string());
+    }
+
+    // base..head 之间提交
+    let range = format!("{}..{}", base, head);
+    let log = state
+        .git
+        .exec(
+            &project.path,
+            &[
+                "log",
+                &range,
+                "--pretty=format:%H%x09%h%x09%s%x09%an%x09%ae%x09%at%x09%P",
+            ],
+        )
+        .await;
+    if !log.success {
+        return Err(format!("对比分支失败：{}", log.stderr));
+    }
+
+    let mut commits = Vec::new();
+    for line in log.stdout.lines() {
+        if line.trim().is_empty() {
+            continue;
+        }
+        let parts: Vec<&str> = line.splitn(7, '\t').collect();
+        if parts.len() < 6 {
+            continue;
+        }
+        commits.push(Commit {
+            id: parts[0].to_string(),
+            short_id: parts[1].to_string(),
+            message: parts[2].to_string(),
+            author: parts[3].to_string(),
+            email: parts[4].to_string(),
+            date: parts[5].parse().unwrap_or(0),
+            parents: parts
+                .get(6)
+                .map(|s| s.split_whitespace().map(|x| x.to_string()).collect())
+                .unwrap_or_default(),
+            is_pushed: true,
+        });
+    }
+
+    // 文件差异：三点 diff base...head
+    let diff_range = format!("{}...{}", base, head);
+    let numstat = state
+        .git
+        .exec(&project.path, &["diff", "--numstat", &diff_range])
+        .await;
+    let name_status = state
+        .git
+        .exec(&project.path, &["diff", "--name-status", &diff_range])
+        .await;
+
+    let mut files: Vec<CommitFile> = Vec::new();
+    if numstat.success && name_status.success {
+        let status_map: std::collections::HashMap<String, String> = name_status
+            .stdout
+            .lines()
+            .filter_map(|l| {
+                let mut it = l.splitn(2, '\t');
+                let st = it.next()?;
+                let path = it.next()?;
+                let path = if let Some((_, p)) = path.split_once('\t') {
+                    p // rename: old\tnew — numstat 用新路径
+                } else if let Some((_, p)) = path.split_once(" -> ") {
+                    p
+                } else {
+                    path
+                };
+                Some((path.to_string(), st.chars().next().unwrap_or('M').to_string()))
+            })
+            .collect();
+        for line in numstat.stdout.lines() {
+            let parts: Vec<&str> = line.splitn(3, '\t').collect();
+            if parts.len() < 3 {
+                continue;
+            }
+            let added: u32 = if parts[0] == "-" { 0 } else { parts[0].parse().unwrap_or(0) };
+            let removed: u32 = if parts[1] == "-" { 0 } else { parts[1].parse().unwrap_or(0) };
+            let path = parts[2].to_string();
+            let status = status_map.get(&path).cloned().unwrap_or_else(|| "M".into());
+            files.push(CommitFile {
+                status,
+                path,
+                original_path: None,
+                added,
+                removed,
+                is_binary: parts[0] == "-" && parts[1] == "-",
+            });
+        }
+    }
+
+    // ahead/behind via rev-list
+    let ahead = state
+        .git
+        .exec(&project.path, &["rev-list", "--count", &format!("{}..{}", base, head)])
+        .await;
+    let behind = state
+        .git
+        .exec(&project.path, &["rev-list", "--count", &format!("{}..{}", head, base)])
+        .await;
+    let ahead_n = ahead.stdout.trim().parse().unwrap_or(commits.len() as u32);
+    let behind_n = behind.stdout.trim().parse().unwrap_or(0);
+
+    Ok(BranchCompareResult {
+        commits,
+        files,
+        ahead: ahead_n,
+        behind: behind_n,
+    })
 }
 
 /// 保存配置到文件

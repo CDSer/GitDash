@@ -93,13 +93,15 @@ export const useOperationStore = defineStore('operation', () => {
     return appStore.projects.find((p) => p.id === projectId)?.name ?? fallback;
   }
 
-  const apiFor = {
-    pull: batchPullApi,
-    fetch: batchFetchApi,
-    push: batchPushApi,
-  } as const;
-
-  async function runBatch(projectIds: string[], operation: BatchOp) {
+  async function runBatch(
+    projectIds: string[],
+    operation: BatchOp,
+    options?: {
+      rebase?: boolean;
+      forceWithLease?: boolean;
+      tags?: boolean;
+    }
+  ) {
     if (projectIds.length === 0) return;
 
     const appStore = useAppStore();
@@ -146,7 +148,18 @@ export const useOperationStore = defineStore('operation', () => {
       });
 
       progress.log(`调用后端 batch_${operation}…`);
-      const results = await apiFor[operation](projectIds);
+      let results;
+      if (operation === 'pull') {
+        results = await batchPullApi(projectIds, options?.rebase ?? false);
+      } else if (operation === 'push') {
+        results = await batchPushApi(
+          projectIds,
+          options?.forceWithLease ?? false,
+          options?.tags ?? false,
+        );
+      } else {
+        results = await batchFetchApi(projectIds);
+      }
       progress.log(`后端返回 ${results.length} 条结果`);
 
       results.forEach((r) => {
@@ -198,16 +211,19 @@ export const useOperationStore = defineStore('operation', () => {
     }
   }
 
-  async function batchPull(projectIds: string[]) {
-    await runBatch(projectIds, 'pull');
+  async function batchPull(projectIds: string[], options?: { rebase?: boolean }) {
+    await runBatch(projectIds, 'pull', options);
   }
 
   async function batchFetch(projectIds: string[]) {
     await runBatch(projectIds, 'fetch');
   }
 
-  async function batchPush(projectIds: string[]) {
-    await runBatch(projectIds, 'push');
+  async function batchPush(
+    projectIds: string[],
+    options?: { forceWithLease?: boolean; tags?: boolean }
+  ) {
+    await runBatch(projectIds, 'push', options);
   }
 
   /** 取消：未开始的任务标为已取消；已执行的仍等待后端结束 */

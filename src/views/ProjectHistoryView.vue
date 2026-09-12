@@ -73,6 +73,20 @@
           <Tag v-if="unpushedCount > 0" variant="warning" class="commit-unpushed-tag">
             {{ unpushedCount }} 条未推送
           </Tag>
+          <input
+            v-model="searchQuery"
+            type="search"
+            class="commit-search"
+            placeholder="搜索提交信息 / 作者…"
+            :disabled="searching"
+            @keyup.enter="runSearch"
+          />
+          <Button size="sm" variant="ghost" :disabled="searching || !searchQuery.trim()" @click="runSearch">
+            搜索
+          </Button>
+          <Button v-if="searchQuery" size="sm" variant="ghost" @click="clearSearch">
+            清除
+          </Button>
         </div>
         <div
           class="commit-scroll relative"
@@ -199,9 +213,68 @@
           <div class="detail-section">
             <div class="detail-label">Commit</div>
             <div class="detail-hash" :title="detail.id">{{ detail.id }}</div>
-            <Button v-if="remoteUrl" size="sm" variant="ghost" class="detail-remote" @click="openRemoteCommit">
-              <ExternalLink :size="12" /> 在远程查看
-            </Button>
+            <div class="detail-actions">
+              <Button size="sm" variant="ghost" title="复制 SHA" @click="copySha">
+                复制 SHA
+              </Button>
+              <Button
+                v-if="remoteUrl"
+                size="sm"
+                variant="ghost"
+                class="detail-remote"
+                @click="openRemoteCommit"
+              >
+                <ExternalLink :size="12" /> 在远程查看
+              </Button>
+            </div>
+            <div class="detail-actions">
+              <Button
+                size="sm"
+                variant="ghost"
+                :disabled="historyBusy || !selectedCommit"
+                title="将该提交应用到当前分支"
+                @click="doCherryPick"
+              >
+                Cherry-pick
+              </Button>
+              <Button
+                size="sm"
+                variant="ghost"
+                :disabled="historyBusy || !selectedCommit"
+                title="反做该提交"
+                @click="doRevert"
+              >
+                Revert
+              </Button>
+              <Button
+                size="sm"
+                variant="ghost"
+                :disabled="historyBusy || !selectedCommit"
+                title="软回退（保留工作区与暂存区）"
+                @click="doReset('soft')"
+              >
+                Soft
+              </Button>
+              <Button
+                size="sm"
+                variant="ghost"
+                :disabled="historyBusy || !selectedCommit"
+                title="混合回退（保留工作区）"
+                @click="doReset('mixed')"
+              >
+                Mixed
+              </Button>
+              <Button
+                size="sm"
+                variant="ghost"
+                class="detail-danger"
+                :disabled="historyBusy || !selectedCommit"
+                title="硬回退（丢弃工作区改动，危险）"
+                @click="doReset('hard')"
+              >
+                Hard
+              </Button>
+            </div>
           </div>
           <div v-if="detail.parents.length" class="detail-section">
             <div class="detail-label">父提交</div>
@@ -268,7 +341,11 @@ import {
   getCommits,
   getCommitDetail,
   gitRemoteUrl,
+  gitCherryPick,
   gitCommitFileDiff,
+  gitRevertCommit,
+  gitReset,
+  gitSearchCommits,
 } from '../lib/tauriApi';
 import { useAppStore } from '../stores/appStore';
 import { useTabStore } from '../stores/tabStore';
@@ -309,6 +386,9 @@ const fileDiffModified = ref('');
 const fileDiffPatch = ref('');
 const fileDiffBinary = ref(false);
 const fileDiffTitle = ref('');
+const searchQuery = ref('');
+const searching = ref(false);
+const historyBusy = ref(false);
 
 const localBranches = computed(() => branches.value.filter((b) => b.is_local));
 const remoteBranches = computed(() => branches.value.filter((b) => b.is_remote));
@@ -452,6 +532,85 @@ async function loadRemoteUrl() {
 function openRemoteCommit() {
   if (remoteUrl.value && detail.value) {
     open(`${remoteUrl.value.replace(/\.git$/, '')}/commit/${detail.value.id}`);
+  }
+}
+
+async function copySha() {
+  const sha = detail.value?.id || selectedCommit.value?.id;
+  if (!sha) return;
+  try {
+    await navigator.clipboard.writeText(sha);
+    toast.success('已复制 SHA');
+  } catch {
+    toast.error('复制失败');
+  }
+}
+
+async function runSearch() {
+  if (!project.value || !searchQuery.value.trim()) return;
+  searching.value = true;
+  try {
+    const branch = branches.value.find((b) => b.display_name === selectedBranch.value)?.name;
+    commits.value = await gitSearchCommits(
+      project.value.id,
+      searchQuery.value.trim(),
+      branch || undefined,
+      80,
+    );
+    endReached.value = true;
+  } catch (e) {
+    toast.error(typeof e === 'string' ? e : '搜索失败');
+  } finally {
+    searching.value = false;
+  }
+}
+
+async function clearSearch() {
+  searchQuery.value = '';
+  await loadCommits(selectedBranch.value);
+}
+
+async function doCherryPick() {
+  if (!project.value || !selectedCommit.value) return;
+  historyBusy.value = true;
+  try {
+    await gitCherryPick(project.value.id, selectedCommit.value.id);
+    toast.success('Cherry-pick 成功');
+  } catch (e) {
+    toast.error(typeof e === 'string' ? e : 'Cherry-pick 失败');
+  } finally {
+    historyBusy.value = false;
+  }
+}
+
+async function doRevert() {
+  if (!project.value || !selectedCommit.value) return;
+  historyBusy.value = true;
+  try {
+    await gitRevertCommit(project.value.id, selectedCommit.value.id);
+    toast.success('Revert 成功');
+  } catch (e) {
+    toast.error(typeof e === 'string' ? e : 'Revert 失败');
+  } finally {
+    historyBusy.value = false;
+  }
+}
+
+async function doReset(mode: 'soft' | 'mixed' | 'hard') {
+  if (!project.value || !selectedCommit.value) return;
+  const warn =
+    mode === 'hard'
+      ? '硬回退将丢弃工作区未提交改动，确定？'
+      : `确定将当前分支 ${mode} 回退到 ${selectedCommit.value.short_id}？`;
+  if (!confirm(warn)) return;
+  historyBusy.value = true;
+  try {
+    await gitReset(project.value.id, selectedCommit.value.id, mode);
+    toast.success(`已 ${mode} reset`);
+  } catch (e) {
+    toast.error(typeof e === 'string' ? e : 'Reset 失败');
+  } finally {
+    historyBusy.value = false;
   }
 }
 
@@ -705,6 +864,30 @@ function statusVariant(status: string): 'success' | 'danger' | 'warning' | 'info
   flex-shrink: 0;
   font-size: 12px;
   color: var(--muted-foreground);
+}
+.commit-search {
+  margin-left: auto;
+  width: 180px;
+  height: 24px;
+  border-radius: 6px;
+  border: 1px solid var(--border);
+  background: var(--background);
+  color: var(--foreground);
+  font-size: 12px;
+  padding: 0 8px;
+  outline: none;
+}
+.commit-search:focus {
+  border-color: var(--primary);
+}
+.detail-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin-top: 8px;
+}
+.detail-danger {
+  color: var(--destructive, #c00);
 }
 .commit-scroll {
   flex: 1;

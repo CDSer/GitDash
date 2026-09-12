@@ -36,6 +36,15 @@
       >
         合并…
       </Button>
+      <Button
+        size="sm"
+        variant="ghost"
+        :disabled="busy"
+        title="分支 / Stash / Tag / 对比"
+        @click="showExtras = true"
+      >
+        Git 操作…
+      </Button>
       <Button size="sm" variant="ghost" :disabled="busy" @click="refresh">
         <RefreshCw :size="14" /> 刷新
       </Button>
@@ -213,6 +222,7 @@
       :current-branch="status?.branch ?? ''"
       @merged="refresh"
     />
+    <GitExtrasPanel v-model="showExtras" :project="project" @changed="refresh" />
   </div>
   <div v-else class="sc-panel-empty">项目不存在或已被移除</div>
 </template>
@@ -251,6 +261,7 @@ import Tag from '../ui/Tag.vue';
 import Empty from '../ui/Empty.vue';
 import DiffViewer from '../Git/DiffViewer.vue';
 import ConflictViewer from '../Git/ConflictViewer.vue';
+import GitExtrasPanel from '../Git/GitExtrasPanel.vue';
 import MergeBranchModal from './MergeBranchModal.vue';
 import { GitBranch, RefreshCw } from 'lucide-vue-next';
 import { toast } from '../../lib/toast';
@@ -270,6 +281,7 @@ const busy = ref(false);
 const selectedFile = ref<ChangedFile | null>(null);
 const commitMessage = ref('');
 const showMergeModal = ref(false);
+const showExtras = ref(false);
 
 const diffOriginal = ref('');
 const diffModified = ref('');

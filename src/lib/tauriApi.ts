@@ -9,6 +9,7 @@ import type {
   ProjectGitResult,
   ProjectStatus,
   Branch,
+  BranchCompareResult,
   Commit,
   CommitDetail,
   CommitFile,
@@ -24,6 +25,8 @@ import type {
   ScanOptions,
   ScannedRepo,
   BatchImportResult,
+  StashEntry,
+  TagInfo,
 } from '../types';
 
 /**
@@ -141,9 +144,13 @@ export async function getProjectStatus(
 /**
  * 批量 Pull 操作
  * @param projectIds 项目 ID 列表
+ * @param rebase 是否使用 --rebase
  */
-export async function batchPull(projectIds: string[]): Promise<ProjectGitResult[]> {
-  return invoke<ProjectGitResult[]>('batch_pull', { projectIds });
+export async function batchPull(
+  projectIds: string[],
+  rebase: boolean = false
+): Promise<ProjectGitResult[]> {
+  return invoke<ProjectGitResult[]>('batch_pull', { projectIds, rebase });
 }
 
 /**
@@ -157,9 +164,15 @@ export async function batchFetch(projectIds: string[]): Promise<ProjectGitResult
 /**
  * 批量 Push 操作
  * @param projectIds 项目 ID 列表
+ * @param forceWithLease 是否使用 --force-with-lease
+ * @param tags 是否同时推送 tags
  */
-export async function batchPush(projectIds: string[]): Promise<ProjectGitResult[]> {
-  return invoke<ProjectGitResult[]>('batch_push', { projectIds });
+export async function batchPush(
+  projectIds: string[],
+  forceWithLease: boolean = false,
+  tags: boolean = false
+): Promise<ProjectGitResult[]> {
+  return invoke<ProjectGitResult[]>('batch_push', { projectIds, forceWithLease, tags });
 }
 
 /**
@@ -233,9 +246,14 @@ export async function gitDiscard(projectId: string, entries: DiscardEntry[]): Pr
 /**
  * 提交（返回新提交 sha + 摘要）
  * @param message 提交信息
+ * @param amend 是否修改最近一次提交
  */
-export async function gitCommit(projectId: string, message: string): Promise<GitCommitResult> {
-  return invoke<GitCommitResult>('git_commit', { projectId, message });
+export async function gitCommit(
+  projectId: string,
+  message: string,
+  amend: boolean = false
+): Promise<GitCommitResult> {
+  return invoke<GitCommitResult>('git_commit', { projectId, message, amend });
 }
 
 /**
@@ -378,6 +396,167 @@ export async function gitCheckoutBranch(projectId: string, branch: string): Prom
  */
 export async function gitRemoteUrl(projectId: string, name?: string): Promise<string | null> {
   return invoke<string | null>('git_remote_url', { projectId, name });
+}
+
+/**
+ * 创建本地分支
+ * @param name 新分支名
+ * @param checkout 创建后是否立即切换
+ * @param startPoint 起点（分支 / tag / commit / 远程分支）
+ * @param track 是否 track startPoint 对应的远程分支
+ */
+export async function gitCreateBranch(
+  projectId: string,
+  name: string,
+  checkout: boolean = true,
+  startPoint?: string,
+  track: boolean = false
+): Promise<void> {
+  return invoke('git_create_branch', {
+    projectId,
+    name,
+    checkout,
+    startPoint: startPoint ?? null,
+    track,
+  });
+}
+
+/** 删除分支 */
+export async function gitDeleteBranch(
+  projectId: string,
+  name: string,
+  force: boolean = false,
+  deleteRemote: boolean = false
+): Promise<void> {
+  return invoke('git_delete_branch', { projectId, name, force, deleteRemote });
+}
+
+/** 设置上游分支（upstream 形如 origin/main） */
+export async function gitSetUpstream(
+  projectId: string,
+  upstream: string,
+  branch?: string
+): Promise<void> {
+  return invoke('git_set_upstream', {
+    projectId,
+    branch: branch ?? null,
+    upstream,
+  });
+}
+
+/** Cherry-pick 指定提交 */
+export async function gitCherryPick(projectId: string, sha: string): Promise<void> {
+  return invoke('git_cherry_pick', { projectId, sha });
+}
+
+/** Revert 指定提交 */
+export async function gitRevertCommit(projectId: string, sha: string): Promise<void> {
+  return invoke('git_revert_commit', { projectId, sha });
+}
+
+/** Reset 到指定目标 */
+export async function gitReset(
+  projectId: string,
+  target: string,
+  mode: 'soft' | 'mixed' | 'hard'
+): Promise<void> {
+  return invoke('git_reset', { projectId, target, mode });
+}
+
+/** 发起 rebase（将当前分支变基到 onto） */
+export async function gitRebase(projectId: string, onto: string): Promise<void> {
+  return invoke('git_rebase', { projectId, onto });
+}
+
+/** 列出 Stash */
+export async function gitStashList(projectId: string): Promise<StashEntry[]> {
+  return invoke<StashEntry[]>('git_stash_list', { projectId });
+}
+
+/** 新建 Stash */
+export async function gitStashPush(
+  projectId: string,
+  message?: string,
+  includeUntracked: boolean = true
+): Promise<void> {
+  return invoke('git_stash_push', {
+    projectId,
+    message: message ?? null,
+    includeUntracked,
+  });
+}
+
+/** 应用 Stash（不删除） */
+export async function gitStashApply(projectId: string, index: number): Promise<void> {
+  return invoke('git_stash_apply', { projectId, index });
+}
+
+/** 弹出 Stash（应用并删除） */
+export async function gitStashPop(projectId: string, index?: number): Promise<void> {
+  return invoke('git_stash_pop', { projectId, index: index ?? null });
+}
+
+/** 丢弃 Stash */
+export async function gitStashDrop(projectId: string, index: number): Promise<void> {
+  return invoke('git_stash_drop', { projectId, index });
+}
+
+/** 列出 Tag */
+export async function gitListTags(projectId: string): Promise<TagInfo[]> {
+  return invoke<TagInfo[]>('git_list_tags', { projectId });
+}
+
+/** 创建 Tag */
+export async function gitCreateTag(
+  projectId: string,
+  name: string,
+  message?: string,
+  commit?: string
+): Promise<void> {
+  return invoke('git_create_tag', {
+    projectId,
+    name,
+    message: message ?? null,
+    commit: commit ?? null,
+  });
+}
+
+/** 删除 Tag */
+export async function gitDeleteTag(
+  projectId: string,
+  name: string,
+  deleteRemote: boolean = false
+): Promise<void> {
+  return invoke('git_delete_tag', { projectId, name, deleteRemote });
+}
+
+/** 推送 Tag（name 省略则全部） */
+export async function gitPushTags(projectId: string, name?: string): Promise<void> {
+  return invoke('git_push_tags', { projectId, name: name ?? null });
+}
+
+/** 搜索提交（message / author） */
+export async function gitSearchCommits(
+  projectId: string,
+  query: string,
+  branch?: string,
+  limit: number = 50
+): Promise<Commit[]> {
+  return invoke<Commit[]>('git_search_commits', {
+    projectId,
+    query,
+    branch: branch ?? null,
+    limit,
+  });
+}
+
+/** 两分支对比 */
+export async function gitDiffBranches(
+  projectId: string,
+  base: string,
+  head: string
+): Promise<BranchCompareResult> {
+  return invoke<BranchCompareResult>('git_diff_branches', { projectId, base, head });
 }
 
 /**

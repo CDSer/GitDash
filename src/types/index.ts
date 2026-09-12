@@ -199,6 +199,29 @@ export interface ScanOptions {
   max_depth?: number;
 }
 
+/** Git tag */
+export interface TagInfo {
+  name: string;
+  sha: string;
+  message: string | null;
+}
+
+/** Stash 条目 */
+export interface StashEntry {
+  index: number;
+  sha: string;
+  message: string;
+  branch: string | null;
+}
+
+/** 两分支对比结果 */
+export interface BranchCompareResult {
+  commits: Commit[];
+  files: CommitFile[];
+  ahead: number;
+  behind: number;
+}
+
 /** 扫描发现的候选仓库 */
 export interface ScannedRepo {
   path: string;

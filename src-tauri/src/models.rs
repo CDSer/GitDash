@@ -335,3 +335,31 @@ pub struct UserSkinTokens {
     pub light: std::collections::HashMap<String, String>,
     pub dark: std::collections::HashMap<String, String>,
 }
+
+/// Git tag 信息
+#[derive(Serialize, Deserialize, Clone, Debug)]
+pub struct TagInfo {
+    pub name: String,
+    pub sha: String,
+    pub message: Option<String>,
+}
+
+/// Stash 条目
+#[derive(Serialize, Deserialize, Clone, Debug)]
+pub struct StashEntry {
+    pub index: u32,
+    pub sha: String,
+    pub message: String,
+    pub branch: Option<String>,
+}
+
+/// 两分支对比结果
+#[derive(Serialize, Clone, Debug)]
+pub struct BranchCompareResult {
+    /// base..head 之间的提交（head 侧）
+    pub commits: Vec<Commit>,
+    /// base...head 之间的文件差异
+    pub files: Vec<CommitFile>,
+    pub ahead: u32,
+    pub behind: u32,
+}

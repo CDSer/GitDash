@@ -49,6 +49,13 @@
         >
           <CloudDownload :size="14" /> 获取
         </Button>
+        <label
+          class="op-opt"
+          :class="{ 'op-opt--disabled': opBusy }"
+          title="拉取时使用 git pull --rebase"
+        >
+          <input v-model="pullRebase" type="checkbox" :disabled="opBusy" /> rebase
+        </label>
         <Button
           size="sm"
           variant="primary"
@@ -58,6 +65,17 @@
         >
           <Download :size="14" /> 拉取
         </Button>
+        <label
+          class="op-opt"
+          :class="{ 'op-opt--disabled': opBusy || !canPush }"
+          title="推送时使用 --force-with-lease"
+        >
+          <input
+            v-model="pushForceLease"
+            type="checkbox"
+            :disabled="opBusy || !canPush"
+          /> 强推
+        </label>
         <Button
           size="sm"
           variant="outline"
@@ -147,6 +165,8 @@ const mode = computed<ProjectTabMode>(
 
 /** 推送成功后 bump，强制历史面板重新拉取（刷新未推送标记） */
 const historyRefreshKey = ref(0);
+const pullRebase = ref(false);
+const pushForceLease = ref(false);
 
 const modes = [
   { value: 'changes' as const, label: '变更', icon: GitMerge },
@@ -205,7 +225,7 @@ async function onFetch() {
 async function onPull() {
   if (opBusy.value || status.value?.in_progress) return;
   try {
-    await operationStore.batchPull([props.projectId]);
+    await operationStore.batchPull([props.projectId], { rebase: pullRebase.value });
     await getStatus(props.projectId, true);
     historyRefreshKey.value += 1;
     const errMsg = latestTaskMessage(props.projectId);
@@ -222,7 +242,9 @@ async function onPull() {
 async function onPush() {
   if (opBusy.value || !canPush.value || status.value?.in_progress) return;
   try {
-    await operationStore.batchPush([props.projectId]);
+    await operationStore.batchPush([props.projectId], {
+      forceWithLease: pushForceLease.value,
+    });
     await getStatus(props.projectId, true);
     const errMsg = latestTaskMessage(props.projectId);
     if (errMsg) {
@@ -241,6 +263,19 @@ async function onPush() {
 <style scoped>
 .project-tab {
   background-color: var(--background);
+}
+.op-opt {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 11px;
+  color: var(--muted-foreground);
+  white-space: nowrap;
+  user-select: none;
+}
+.op-opt--disabled {
+  opacity: 0.5;
+  pointer-events: none;
 }
 .tab-header {
   display: flex;

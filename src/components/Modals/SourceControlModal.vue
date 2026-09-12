@@ -41,6 +41,15 @@
         >
           合并…
         </Button>
+        <Button
+          size="sm"
+          variant="ghost"
+          :disabled="busy"
+          title="分支 / Stash / Tag / 对比"
+          @click="showExtras = true"
+        >
+          Git 操作…
+        </Button>
         <Button v-if="remoteUrl" size="sm" variant="ghost" :disabled="busy" @click="openRemote">
           在远程查看
         </Button>
@@ -227,6 +236,7 @@
       :current-branch="status?.branch ?? ''"
       @merged="onMerged"
     />
+    <GitExtrasPanel v-model="showExtras" :project="project" @changed="refresh" />
   </Dialog>
 </template>
 
@@ -267,6 +277,7 @@ import Empty from '../ui/Empty.vue';
 import Spinner from '../ui/Spinner.vue';
 import DiffViewer from '../Git/DiffViewer.vue';
 import ConflictViewer from '../Git/ConflictViewer.vue';
+import GitExtrasPanel from '../Git/GitExtrasPanel.vue';
 import MergeBranchModal from './MergeBranchModal.vue';
 import { GitBranch, RefreshCw } from 'lucide-vue-next';
 import { toast } from '../../lib/toast';
@@ -281,6 +292,7 @@ const busy = ref(false);
 const selectedFile = ref<ChangedFile | null>(null);
 const commitMessage = ref('');
 const showMergeModal = ref(false);
+const showExtras = ref(false);
 
 const diffOriginal = ref('');
 const diffModified = ref('');
